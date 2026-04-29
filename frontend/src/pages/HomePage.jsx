@@ -208,20 +208,7 @@ export default function HomePage() {
 
       {/* Page Header */}
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="page-title">Dashboard</h1>
-          <p className="page-subtitle">
-            Welcome back, <span className="font-semibold text-gray-700">{user?.username}</span>. Here's your CRM at a glance.
-          </p>
-        </div>
         <div className="flex items-center gap-2">
-          <button
-            onClick={fetchAll}
-            className="w-9 h-9 flex items-center justify-center rounded-xl bg-white border border-gray-200 shadow-sm hover:bg-gray-50 transition-colors"
-            title="Refresh dashboard"
-          >
-            <Icon name="mdi:refresh" className="w-4 h-4 text-gray-500" />
-          </button>
           <div className="flex items-center gap-0.5 bg-white border border-gray-200 rounded-xl p-1 shadow-sm">
             {(['today', 'week', 'month', 'quarter']).map((range) => (
               <button
@@ -233,6 +220,15 @@ export default function HomePage() {
               >{DATE_LABELS[range]}</button>
             ))}
           </div>
+        </div>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={fetchAll}
+            className="w-9 h-9 flex items-center justify-center rounded-xl bg-white border border-gray-200 shadow-sm hover:bg-gray-50 transition-colors"
+            title="Refresh dashboard"
+          >
+            <Icon name="mdi:refresh" className="w-4 h-4 text-gray-500" />
+          </button>
         </div>
       </div>
 

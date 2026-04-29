@@ -78,3 +78,5 @@ export default function StatusChart({ title, type = 'doughnut', items = [] }) {
     </div>
   )
 }
+
+s

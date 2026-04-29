@@ -1,49 +1,44 @@
 import { create } from 'zustand'
+import { persist } from 'zustand/middleware'
 
-const TOKEN_KEY = 'crm_token'
-const USER_KEY = 'crm_user'
+export const useAuthStore = create(
+  persist(
+    (set, get) => ({
+      token: null,
+      user: null,
+      hasHydrated: false,
 
-export const useAuthStore = create((set, get) => ({
-  token: null,
-  user: null,
+      setHasHydrated: (state) => set({ hasHydrated: state }),
 
-  isAuthenticated: () => !!get().token,
-  currentUser: () => get().user,
-  isAdmin: () => get().user?.role?.toLowerCase() === 'admin',
-  hasPermission: (permission) => {
-    const perms = get().user?.permissions ?? []
-    return perms.includes(permission)
-  },
-  hasAnyPermission: (permissions) => {
-    const perms = get().user?.permissions ?? []
-    return permissions.some((p) => perms.includes(p))
-  },
+      isAuthenticated: () => !!get().token,
+      currentUser: () => get().user,
+      isAdmin: () => get().user?.role?.toLowerCase() === 'admin',
 
-  setAuth: (data) => {
-    const { token, ...user } = data
-    localStorage.setItem(TOKEN_KEY, token)
-    localStorage.setItem(USER_KEY, JSON.stringify(user))
-    set({ token, user })
-  },
+      hasPermission: (permission) => {
+        const perms = get().user?.permissions ?? []
+        return perms.includes(permission)
+      },
 
-  logout: () => {
-    localStorage.removeItem(TOKEN_KEY)
-    localStorage.removeItem(USER_KEY)
-    set({ token: null, user: null })
-  },
+      hasAnyPermission: (permissions) => {
+        const perms = get().user?.permissions ?? []
+        return permissions.some((p) => perms.includes(p))
+      },
 
-  loadFromStorage: () => {
-    const token = localStorage.getItem(TOKEN_KEY)
-    const userStr = localStorage.getItem(USER_KEY)
-    if (token && userStr) {
-      try {
-        const user = JSON.parse(userStr)
-        set({ token, user })
-      } catch {
-        localStorage.removeItem(TOKEN_KEY)
-        localStorage.removeItem(USER_KEY)
-        set({ token: null, user: null })
-      }
+      setAuth: (data) => {
+        const { token, ...user } = data
+        set({ token, user }) // ✅ no manual localStorage
+      },
+
+      logout: () => {
+        set({ token: null, user: null }) // ✅ persist will handle removal
+      },
+    }),
+    {
+      name: 'auth-storage',
+
+      onRehydrateStorage: () => (state) => {
+        state.setHasHydrated(true)
+      },
     }
-  },
-}))
+  )
+)
