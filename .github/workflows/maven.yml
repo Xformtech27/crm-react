@@ -1,10 +1,20 @@
+name: Backend CI
+
+on:
+  push:
+    paths:
+      - 'backend/**'
+  pull_request:
+    paths:
+      - 'backend/**'
+
 jobs:
   build:
     runs-on: ubuntu-latest
 
     defaults:
       run:
-        working-directory: backend   # ✅ THIS FIXES EVERYTHING
+        working-directory: backend
 
     steps:
       - name: Checkout code
