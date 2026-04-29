@@ -13,12 +13,11 @@ on:
 
 jobs:
   build:
-    name: Build and Test Frontend
     runs-on: ubuntu-latest
 
-    strategy:
-      matrix:
-        node-version: [18.x]
+    defaults:
+      run:
+        working-directory: frontend
 
     steps:
       - name: Checkout
@@ -27,24 +26,14 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: ${{ matrix.node-version }}
+          node-version: 18
           cache: 'npm'
 
       - name: Install dependencies
-        working-directory: frontend
         run: npm ci
 
       - name: Run tests
-        working-directory: frontend
         run: npm test --silent --if-present
 
       - name: Build
-        working-directory: frontend
         run: npm run build --if-present
-
-      - name: Upload production build artifact
-        if: success()
-        uses: actions/upload-artifact@v4
-        with:
-          name: frontend-dist
-          path: frontend/dist
