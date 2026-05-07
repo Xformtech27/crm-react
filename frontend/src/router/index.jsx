@@ -31,6 +31,7 @@ import AnalyticsPage from "../pages/analytics/AnalyticsPage";
 import ReportsPage from "../pages/reports/ReportsPage";
 import AutomationPage from "../pages/automation/AutomationPage";
 import CreateTeamPage from "../pages/create-team/CreateTeamPage";
+import AttendancePage from "../pages/attendance/AttendancePage.jsx.jsx";
 
 export default function AppRouter() {
   return (
@@ -73,6 +74,7 @@ export default function AppRouter() {
         <Route path="/emails" element={<EmailsPage />} />
         <Route path="/inbox" element={<InboxPage />} />
         <Route path="/calendar" element={<CalendarPage />} />
+        <Route path="/attendance" element={<AttendancePage />} />
         <Route path="/analytics" element={<AnalyticsPage />} />
         <Route path="/reports" element={<ReportsPage />} />
         <Route path="/automation" element={<AutomationPage />} />

@@ -84,8 +84,13 @@ export default function LoginPage() {
     try {
       await login(form.userEmail, form.password);
     } catch (e) {
+      const message =
+        e?.response?.data?.message ||
+        (e?.request
+          ? "Cannot reach the CRM server. Please make sure the backend is running on port 8090."
+          : "Login failed. Please try again.");
       setError(
-        e?.response?.data?.message || "Invalid credentials. Please try again.",
+        message,
       );
     } finally {
       setLoading(false);

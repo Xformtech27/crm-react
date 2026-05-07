@@ -6,7 +6,7 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 
 @Entity
-@Table(name = "xformsales_opportunity")
+@Table(name = "crm_xformsales_opportunity")
 @Getter @Setter @NoArgsConstructor @AllArgsConstructor @Builder
 public class Opportunity {
 

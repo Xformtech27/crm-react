@@ -5,7 +5,7 @@ import lombok.*;
 import java.time.LocalDate;
 
 @Entity
-@Table(name = "xformsales_organization")
+@Table(name = "crm_xformsales_organization")
 @Getter @Setter @NoArgsConstructor @AllArgsConstructor @Builder
 public class Organization {
 

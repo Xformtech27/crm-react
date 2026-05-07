@@ -2,12 +2,24 @@ import axios from 'axios'
 
 let instance = null
 
+function getStoredToken() {
+  const authStorage = localStorage.getItem('auth-storage')
+  if (authStorage) {
+    try {
+      return JSON.parse(authStorage)?.state?.token
+    } catch {
+      localStorage.removeItem('auth-storage')
+    }
+  }
+  return localStorage.getItem('crm_token')
+}
+
 export function getApiClient(baseURL) {
   if (!instance) {
     instance = axios.create({ baseURL })
 
     instance.interceptors.request.use((config) => {
-      const token = localStorage.getItem('crm_token')
+      const token = getStoredToken()
       if (token) {
         config.headers.Authorization = `Bearer ${token}`
       }
@@ -20,6 +32,7 @@ export function getApiClient(baseURL) {
         if (error.response?.status === 401) {
           localStorage.removeItem('crm_token')
           localStorage.removeItem('crm_user')
+          localStorage.removeItem('auth-storage')
           window.location.href = '/login'
         }
         return Promise.reject(error)

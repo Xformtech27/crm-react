@@ -14,7 +14,7 @@ import java.util.stream.Collectors;
 @Configuration
 public class CorsConfig {
 
-    @Value("${app.cors.allowed-origin-patterns:http://localhost:3000,http://localhost:3001}")
+    @Value("${app.cors.allowed-origin-patterns:http://localhost:3000,http://localhost:3001,http://localhost:5173}")
     private String allowedOriginPatterns;
 
     @Bean
@@ -25,7 +25,7 @@ public class CorsConfig {
             .map(String::trim)
             .filter(s -> !s.isEmpty())
             .collect(Collectors.toList());
-        config.setAllowedOriginPatterns(origins.isEmpty() ? List.of("http://localhost:3000") : origins);
+        config.setAllowedOriginPatterns(origins.isEmpty() ? List.of("http://localhost:5173") : origins);
         config.setAllowedHeaders(List.of("*"));
         config.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"));
         config.setExposedHeaders(List.of("Authorization"));

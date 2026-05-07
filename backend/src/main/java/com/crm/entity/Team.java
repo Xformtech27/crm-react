@@ -4,7 +4,7 @@ import jakarta.persistence.*;
 import lombok.*;
 
 @Entity
-@Table(name = "xformsales_team")
+@Table(name = "crm_xformsales_team")
 @Getter @Setter @NoArgsConstructor @AllArgsConstructor @Builder
 public class Team {
 

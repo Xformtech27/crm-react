@@ -6,7 +6,7 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 
 @Entity
-@Table(name = "xformsales_lead")
+@Table(name = "crm_xformsales_lead")
 @Getter @Setter @NoArgsConstructor @AllArgsConstructor @Builder
 public class Lead {
 

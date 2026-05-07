@@ -98,6 +98,11 @@ export default function DefaultLayout() {
             label: "Calendar",
             icon: "mdi:calendar-month-outline",
           },
+          {
+            to: "/attendance",
+            label: "Attendance",
+            icon: "mdi:clock-check-outline"
+          }
         ],
       },
       {

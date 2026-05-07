@@ -4,7 +4,7 @@ import jakarta.persistence.*;
 import lombok.*;
 
 @Entity
-@Table(name = "xformsales_permission")
+@Table(name = "crm_xformsales_permission")
 @Getter @Setter @NoArgsConstructor @AllArgsConstructor @Builder
 public class Permission {
 

@@ -5,7 +5,7 @@ import lombok.*;
 import java.time.LocalDateTime;
 
 @Entity
-@Table(name = "xformsales_lead_reminder")
+@Table(name = "crm_xformsales_lead_reminder")
 @Getter @Setter @NoArgsConstructor @AllArgsConstructor @Builder
 public class LeadReminder {
 

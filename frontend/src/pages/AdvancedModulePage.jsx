@@ -10,6 +10,11 @@ import Icon from "../components/Icon";
 import AppModal from "../components/common/AppModal";
 import { useTask } from "../hooks/useTask";
 
+
+
+
+
+
 const moduleMap = {
   pipeline: {
     title: "Pipeline",
@@ -282,6 +287,7 @@ const moduleMap = {
       { name: "note", label: "Note", type: "textarea", span: 2 },
     ],
   },
+  
 };
 
 function CalendarMonthView() {
