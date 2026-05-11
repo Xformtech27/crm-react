@@ -91,7 +91,8 @@ function timeAgo(dateStr) {
 }
 
 export default function LeadListPage() {
-  const { getAll, create, update, remove, getAllScores } = useLead();
+  const { getAll, create, update, remove, getAllScores, exportLeads } =
+    useLead();
   const leadFormRef = useRef(null);
 
   const [allLeads, setAllLeads] = useState([]);
@@ -306,7 +307,7 @@ export default function LeadListPage() {
     setSortDir("desc");
   }
 
-  function bulkExport() {
+  async function bulkExport() {
     const selected = allLeads.filter((l) => selectedIds.has(l.leadId));
     const headers = [
       "ID",
@@ -421,7 +422,7 @@ export default function LeadListPage() {
   return (
     <div className="animate-fade-in flex flex-col gap-0">
       {/* Top Bar */}
-      <div className="flex items-center justify-between gap-4 mb-4">
+      <div className="flex items-center justify-between gap-4 ">
         <div className="flex items-center gap-3">
           {/* <h1 className="text-xl font-semibold text-gray-900 leading-none">
             Leads
@@ -430,45 +431,17 @@ export default function LeadListPage() {
           {/* {totalCount} */}
           {/* </span> */}
         </div>
+
         
-       
-        <div className="flex items-center gap-2">
-
-             <div className="relative w-72 mr-auto">
-          <Icon
-            name="mdi:magnify"
-            className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none"
-          />
-          <input
-            type="text"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Search name, mobile, email, org..."
-            className="pl-8 pr-3 py-2 w-full text-sm border border-gray-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400 placeholder-gray-400"
-          />
-        </div>
-
-          <Link
-            to="/lead/import"
-            className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg border border-gray-200 bg-white text-sm font-medium text-gray-700 hover:bg-gray-50 hover:border-gray-300 transition-colors shadow-sm"
-          >
-            <Icon name="mdi:cloud-upload-outline" className="w-4 h-4" />
-            Import
-          </Link>
-
-          <button
-            onClick={openCreate}
-            className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-blue-600 text-sm font-medium text-white hover:bg-blue-700 transition-colors shadow-sm shadow-blue-200"
-          >
-            <Icon name="mdi:plus" className="w-4 h-4" />
-            New Lead
-          </button>
-        </div>
       </div>
 
       {/* Filter Bar */}
-      <div className="-mt-8 flex flex-col gap-3 mb-3">
-        <div className="-mt-4 flex flex-wrap items-center gap-2">
+      <div className="  flex flex-col gap-3 mb-3">
+        {/* .. left*/}
+        <div className="flex justify-between">
+          {/* ............. */}
+           <div className="-mt- flex flex-wrap items-center gap-2">
+          {/* ..left side  */}
           <div className="flex items-center gap-1 flex-wrap">
             {STATUS_TABS.map((s) => (
               <button
@@ -498,8 +471,42 @@ export default function LeadListPage() {
             ))}
           </select>
         </div>
+          <div className="flex items-center gap-2 p-4">
+          <div className="relative w-72 mr-auto">
+            <Icon
+              name="mdi:magnify"
+              className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none"
+            />
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Search name, mobile, email, org..."
+              className="pl-8 pr-3 py-2 w-full text-sm border border-gray-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400 placeholder-gray-400"
+            />
+          </div>
+
+          <Link
+            to="/lead/import"
+            className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg border border-gray-200 bg-white text-sm font-medium text-gray-700 hover:bg-gray-50 hover:border-gray-300 transition-colors shadow-sm"
+          >
+            <Icon name="mdi:cloud-upload-outline" className="w-4 h-4" />
+            Import
+          </Link>
+
+          <button
+            onClick={openCreate}
+            className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-blue-600 text-sm font-medium text-white hover:bg-blue-700 transition-colors shadow-sm shadow-blue-200"
+          >
+            <Icon name="mdi:plus" className="w-4 h-4" />
+            New Lead
+          </button>
+        </div></div>
+       
+
 
         <div className="flex flex-wrap items-center gap-2">
+          {/* .dtatennn */}
           <div className="flex items-center gap-1">
             <input
               type="date"
@@ -515,7 +522,7 @@ export default function LeadListPage() {
               className="text-xs border border-gray-200 rounded-lg px-2.5 py-1.5 bg-white text-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400"
             />
           </div>
-
+{/* .gread */}
           <div className="ml-auto flex items-center gap-1">
             <div className="flex items-center gap-1 bg-white border border-gray-200 rounded-lg p-0.5">
               {["", "A", "B", "C", "D"].map((g) => (
@@ -1394,7 +1401,10 @@ export default function LeadListPage() {
                     Cancel
                   </button>
                   <button
-                    onClick={() => leadFormRef.current?.submit()}
+                    type="button"
+                    onClick={() =>
+                      document.getElementById("lead-form")?.requestSubmit?.()
+                    }
                     disabled={modalSaving}
                     className="inline-flex items-center gap-2 px-6 py-2.5 rounded-lg bg-blue-600 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-60 transition-colors shadow-sm"
                   >
@@ -1459,3 +1469,4 @@ export default function LeadListPage() {
     </div>
   );
 }
+

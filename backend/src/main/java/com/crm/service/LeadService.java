@@ -22,12 +22,17 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.reactive.function.client.WebClient;
+import org.springframework.web.util.UriComponentsBuilder;
 
 import java.io.IOException;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
+import java.time.format.DateTimeFormatterBuilder;
+import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 
 @Slf4j
@@ -49,6 +54,9 @@ public class LeadService {
 
     @Value("${app.indiamart.url}")
     private String indiamartUrl;
+
+    private static final DateTimeFormatter INDIAMART_DATE_FORMAT =
+            DateTimeFormatter.ofPattern("dd-MMM-yyyy", Locale.ENGLISH);
 
     public List<Lead> getAllLeads(Long userId, String role) {
         if ("admin".equalsIgnoreCase(role)) {
@@ -166,13 +174,18 @@ public class LeadService {
         return opportunityRepository.save(opp);
     }
 
+    @Transactional
     @SuppressWarnings("unchecked")
     public List<Lead> importFromIndiamart(ImportLeadRequest request, Long userId) {
-        List<Lead> imported = new ArrayList<>();
+        validateImportRequest(request);
+
         try {
-            String url = indiamartUrl + "?glusr_crm_key=" + indiamartApiKey
-                    + "&start_time=" + request.getFromDate()
-                    + "&end_time=" + request.getToDate();
+            String url = UriComponentsBuilder.fromHttpUrl(indiamartUrl)
+                    .queryParam("glusr_crm_key", indiamartApiKey)
+                    .queryParam("start_time", formatIndiamartDate(request.getFromDate()))
+                    .queryParam("end_time", formatIndiamartDate(request.getToDate()))
+                    .build()
+                    .toUriString();
 
             Map<String, Object> response = webClient.get()
                     .uri(url)
@@ -180,41 +193,161 @@ public class LeadService {
                     .bodyToMono(Map.class)
                     .block();
 
-            if (response == null) return imported;
-
-            Object dataObj = response.get("DATA");
-            if (!(dataObj instanceof List)) return imported;
-            List<Map<String, Object>> data = (List<Map<String, Object>>) dataObj;
+            List<Map<String, Object>> data = extractIndiamartLeads(response);
+            List<Lead> imported = new ArrayList<>();
 
             for (Map<String, Object> item : data) {
-                String queryId = String.valueOf(item.getOrDefault("UNIQUE_QUERY_ID", ""));
-                if (leadRepository.existsByUniqueQueryId(queryId)) continue;
+                String queryId = text(item, "UNIQUE_QUERY_ID");
+                if (queryId.isBlank() || leadRepository.existsByUniqueQueryId(queryId)) {
+                    continue;
+                }
 
                 Lead lead = Lead.builder()
-                        .leadFirstName(String.valueOf(item.getOrDefault("SENDER_NAME", "")))
-                        .leadEmail(String.valueOf(item.getOrDefault("SENDER_EMAIL", "")))
-                        .leadMobileNo(String.valueOf(item.getOrDefault("SENDER_MOBILE", "")))
-                        .leadOrganisationName(String.valueOf(item.getOrDefault("SENDER_COMPANY", "")))
-                        .leadAddress(String.valueOf(item.getOrDefault("SENDER_ADDRESS", "")))
-                        .leadCity(String.valueOf(item.getOrDefault("SENDER_CITY", "")))
-                        .leadState(String.valueOf(item.getOrDefault("SENDER_STATE", "")))
+                        .leadFirstName(text(item, "SENDER_NAME"))
+                        .leadEmail(text(item, "SENDER_EMAIL"))
+                        .leadMobileNo(text(item, "SENDER_MOBILE"))
+                        .leadPhoneNo(text(item, "SENDER_PHONE"))
+                        .leadOrganisationName(text(item, "SENDER_COMPANY"))
+                        .leadAddress(text(item, "SENDER_ADDRESS"))
+                        .leadCity(text(item, "SENDER_CITY"))
+                        .leadState(text(item, "SENDER_STATE"))
+                        .leadCountry(text(item, "SENDER_COUNTRY_ISO"))
+                        .leadTitle(firstPresent(item, "SUBJECT", "QUERY_PRODUCT_NAME"))
+                        .leadReason(text(item, "QUERY_MESSAGE"))
                         .uniqueQueryId(queryId)
                         .leadSource(AppConstants.INDIAMART_SOURCE)
                         .leadType(AppConstants.INDIAMART_DEFAULT_TYPE)
                         .leadStatus(AppConstants.INDIAMART_DEFAULT_STATUS)
-                        .inquiryDate(LocalDate.now())
+                        .inquiryDate(parseInquiryDate(item))
                         .leadCreatedDate(LocalDateTime.now())
                         .userIdFk(userId)
                         .build();
                 Lead saved = leadRepository.save(lead);
-                leadScoringService.scoreAndCache(saved.getLeadId());
+                refreshLeadScore(saved);
                 imported.add(saved);
             }
+
+            log.info("Imported {} new Indiamart lead(s) between {} and {}",
+                    imported.size(), request.getFromDate(), request.getToDate());
+            return imported;
         } catch (Exception e) {
-            log.error("Indiamart import error: {}", e.getMessage());
+            log.error("Indiamart import error", e);
             throw new BadRequestException("Failed to import leads from Indiamart: " + e.getMessage());
         }
-        return imported;
+    }
+
+    private void validateImportRequest(ImportLeadRequest request) {
+        if (request.getFromDate() == null || request.getToDate() == null) {
+            throw new BadRequestException("Both From Date and To Date are required.");
+        }
+        if (request.getFromDate().isAfter(request.getToDate())) {
+            throw new BadRequestException("From Date cannot be later than To Date.");
+        }
+        if (indiamartApiKey == null || indiamartApiKey.isBlank()) {
+            throw new BadRequestException("Indiamart API key is not configured.");
+        }
+        if (indiamartUrl == null || indiamartUrl.isBlank()) {
+            throw new BadRequestException("Indiamart API URL is not configured.");
+        }
+    }
+
+    private String formatIndiamartDate(LocalDate date) {
+        return INDIAMART_DATE_FORMAT.format(date).toUpperCase(Locale.ENGLISH);
+    }
+
+    @SuppressWarnings("unchecked")
+    private List<Map<String, Object>> extractIndiamartLeads(Map<String, Object> response) {
+        if (response == null || response.isEmpty()) {
+            return List.of();
+        }
+
+        Object code = response.get("CODE");
+        if (code != null && !isSuccessfulCode(code)) {
+            String message = firstPresent(response, "MESSAGE", "STATUS", "ERROR_MESSAGE");
+            throw new BadRequestException(message.isBlank() ? "Indiamart returned error code " + code : message);
+        }
+
+        Object leads = response.get("RESPONSE");
+        if (!(leads instanceof List)) {
+            leads = response.get("DATA");
+        }
+        if (!(leads instanceof List<?> list)) {
+            return List.of();
+        }
+
+        List<Map<String, Object>> parsed = new ArrayList<>();
+        for (Object item : list) {
+            if (item instanceof Map<?, ?> map) {
+                parsed.add((Map<String, Object>) map);
+            }
+        }
+        return parsed;
+    }
+
+    private String firstPresent(Map<String, Object> item, String... keys) {
+        for (String key : keys) {
+            String value = text(item, key);
+            if (!value.isBlank()) {
+                return value;
+            }
+        }
+        return "";
+    }
+
+    private String text(Map<String, Object> item, String key) {
+        Object value = item.get(key);
+        return value == null ? "" : String.valueOf(value).trim();
+    }
+
+    private boolean isSuccessfulCode(Object code) {
+        if (code instanceof Number number) {
+            return number.intValue() == 200;
+        }
+        return "200".equals(String.valueOf(code).trim());
+    }
+
+    private LocalDate parseInquiryDate(Map<String, Object> item) {
+        String value = firstPresent(item, "QUERY_TIME", "QUERY_DATE", "DATE_RE");
+        if (value.isBlank()) {
+            return LocalDate.now();
+        }
+
+        List<DateTimeFormatter> formats = List.of(
+                caseInsensitiveFormatter("dd-MMM-yyyy"),
+                caseInsensitiveFormatter("dd-MMM-yyyy HH:mm:ss"),
+                DateTimeFormatter.ofPattern("dd-MM-yyyy HH:mm:ss", Locale.ENGLISH),
+                DateTimeFormatter.ISO_LOCAL_DATE
+        );
+
+        for (DateTimeFormatter formatter : formats) {
+            try {
+                if (formatter == DateTimeFormatter.ISO_LOCAL_DATE) {
+                    return LocalDate.parse(value, formatter);
+                }
+                if (value.length() > 11) {
+                    return LocalDateTime.parse(value, formatter).toLocalDate();
+                }
+                return LocalDate.parse(value, formatter);
+            } catch (DateTimeParseException ignored) {
+                // Try the next known IndiaMART date shape.
+            }
+        }
+        return LocalDate.now();
+    }
+
+    private DateTimeFormatter caseInsensitiveFormatter(String pattern) {
+        return new DateTimeFormatterBuilder()
+                .parseCaseInsensitive()
+                .appendPattern(pattern)
+                .toFormatter(Locale.ENGLISH);
+    }
+
+    private void refreshLeadScore(Lead lead) {
+        try {
+            leadScoringService.scoreAndCache(lead.getLeadId());
+        } catch (Exception e) {
+            log.warn("Lead {} imported but score refresh failed: {}", lead.getLeadId(), e.getMessage());
+        }
     }
 
     private Lead mapToEntity(LeadRequest req, Lead lead) {

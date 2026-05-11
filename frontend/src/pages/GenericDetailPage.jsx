@@ -36,24 +36,28 @@ export default function GenericDetailPage({ title, backTo, icon, getById, idLabe
   }, [id])
 
   return (
-    <div className="animate-fade-in space-y-5 pb-6">
-      <section className="workspace-panel p-4 sm:p-5">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="flex min-w-0 items-center gap-3">
-            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-indigo-50 text-indigo-700">
+    <div >
+      <section >
+        <div >
+            <Link to={backTo} className="btn-secondary">
+              <Icon name="mdi:arrow-left" className="h-4 w-4" /> Back
+            </Link>
+      
+          <div>
+            {/* <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-indigo-50 text-indigo-700">
               <Icon name={icon} className="h-6 w-6" />
-            </div>
-            <div>
+            </div> */}
+            {/* <div>
               <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">{idLabel} #{id}</p>
               <h1 className="text-xl font-semibold text-gray-900">{loading ? title : display(item?.[primaryKey])}</h1>
               <p className="mt-1 text-sm text-gray-500">{loading ? 'Loading record details...' : display(item?.[secondaryKey])}</p>
-            </div>
+            </div> */}
           </div>
-          <Link to={backTo} className="btn-secondary">
-            <Icon name="mdi:arrow-left" className="h-4 w-4" /> Back
-          </Link>
-        </div>
-      </section>
+            </div>
+             </section>
+            
+      
+     
 
       {loading ? (
         <section className="workspace-panel p-5">
@@ -64,7 +68,7 @@ export default function GenericDetailPage({ title, backTo, icon, getById, idLabe
         </section>
       ) : failed ? (
         <section className="workspace-panel p-10 text-center">
-          <p className="text-base font-semibold text-gray-900">Unable to load {title.toLowerCase()}</p>
+          <p className="text-base font-semibold text-gray-900">Unable to load{title.toLowerCase()}</p>
           <p className="mt-1 text-sm text-gray-500">The backend did not return this record.</p>
         </section>
       ) : (

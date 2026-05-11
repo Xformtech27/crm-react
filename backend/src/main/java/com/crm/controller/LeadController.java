@@ -111,7 +111,7 @@ public class LeadController {
         return ResponseEntity.ok(ApiResponse.success("Lead converted to opportunity", leadService.convertToOpportunity(id, user.getUserid())));
     }
 
-    @PostMapping("/import")
+    @PostMapping({"/import", "/import/indiamart"})
     public ResponseEntity<ApiResponse<List<Lead>>> importFromIndiamart(@Valid @RequestBody ImportLeadRequest request, Authentication auth) {
         User user = authUtil.getCurrentUser(auth);
         return ResponseEntity.ok(ApiResponse.success("Leads imported from Indiamart", leadService.importFromIndiamart(request, user.getUserid())));

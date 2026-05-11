@@ -12,9 +12,10 @@
     </parent>
 
     <groupId>com.crm</groupId>
-    <artifactId>crm-backend</artifactId>
+    <artifactId>backend</artifactId>
     <version>1.0.0</version>
     <name>crm-backend</name>
+    <packaging>war</packaging>  
     <description>CRM Backend - Spring Boot 3 REST API</description>
 
     <properties>
@@ -45,6 +46,12 @@
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-mail</artifactId>
         </dependency>
+        
+        <dependency>
+        	<groupId>org.springframework.boot</groupId>
+        	<artifactId>spring-boot-starter-tomcat</artifactId>
+        	<scope>provided</scope>
+    	</dependency>
 
         <!-- Database -->
         <dependency>
@@ -78,6 +85,8 @@
             <artifactId>lombok</artifactId>
             <optional>true</optional>
         </dependency>
+        
+        
 
         <!-- HTTP Client for Indiamart API -->
         <dependency>
