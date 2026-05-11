@@ -1,6 +1,6 @@
 import { getApiClient } from '../utils/api'
 
-const BASE_URL = import.meta.env.VITE_API_BASE || 'http://localhost:8090/api'
+const BASE_URL = import.meta.env.VITE_API_BASE || 'http://localhost:8080/api'
 
 export function useApi() {
   const client = getApiClient(BASE_URL)

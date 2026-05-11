@@ -1,0 +1,7 @@
+INDEX VERSION 1.4+E:\crm-react\.metadata\.plugins\org.eclipse.wst.jsdt.core\indexes
+50561825.index
+1965174767.index
+1663321629.index
+4034324298.index
+1879870383.index
+538222469.index
