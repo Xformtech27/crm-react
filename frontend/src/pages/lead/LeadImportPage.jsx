@@ -220,11 +220,13 @@ export default function LeadImportPage() {
     setLoading(true)
     setAlert(null)
     try {
+      // Create leads sequentially to avoid overwhelming backend; stop on first failure.
       let imported = 0
       for (const lead of leads) {
         await create(lead, {})
         imported += 1
       }
+
       setAlert({ type: 'success', message: `Imported ${imported} lead(s) successfully.` })
       setLeads([])
       setFileName('')

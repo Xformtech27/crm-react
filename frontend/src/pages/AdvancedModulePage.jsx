@@ -152,6 +152,13 @@ const moduleMap = {
     subtitle: "s",
     icon: "mdi:chart-box-outline",
     source: "repRanking",
+    customActions: [
+      {
+        label: "New Analytics",
+        icon: "mdi:plus-circle-outline",
+        action: "create",
+      },
+    ],
     mapRows: (rows) =>
       rows.map((row, index) => ({
         ...row,

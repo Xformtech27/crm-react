@@ -369,14 +369,17 @@ export default function LeadListPage() {
     setShowPanel(true);
   }
 
-  async function handleSave(formData) {
+async function handleSave(formData) {
     setModalSaving(true);
     try {
+      // LeadForm currently submits only JSON fields; no upload state is defined in this page.
+      // Keep API payload compatible by sending an empty files object.
+      const safeFiles = {};
       if (editingLead?.leadId) {
-        await update(editingLead.leadId, formData, {});
+        await update(editingLead.leadId, formData, safeFiles);
         showToast("success", "Lead updated.");
       } else {
-        await create(formData, {});
+        await create(formData, safeFiles);
         showToast("success", "Lead created.");
       }
       setShowModal(false);
@@ -387,6 +390,7 @@ export default function LeadListPage() {
       setModalSaving(false);
     }
   }
+
 
   async function handleDelete() {
     if (!deleteId) return;
@@ -1379,7 +1383,8 @@ export default function LeadListPage() {
                   ref={leadFormRef}
                   initial={editingLead}
                   loading={modalSaving}
-                  onSubmit={handleSave}
+onSubmit={handleSave}
+
                 />
               </div>
               <div className="flex items-center justify-between gap-3 px-6 py-4 border-t border-gray-100 bg-gray-50/70 shrink-0">
