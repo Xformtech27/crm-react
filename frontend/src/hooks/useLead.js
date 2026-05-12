@@ -37,7 +37,7 @@ export function useLead() {
   const convertToOpportunity = (id) => api.post(`/leads/${id}/convert`, {});
 
   const importFromIndiamart = (fromDate, toDate) =>
-    api.post("/leads/import/indiamart", { fromDate, toDate });
+    api.post("/leads/import", { fromDate, toDate });
 
   const getScore = (id) => api.get(`/leads/${id}/score`);
   const getAllScores = () => api.get("/leads/scores");

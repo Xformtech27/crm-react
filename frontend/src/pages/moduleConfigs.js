@@ -595,7 +595,6 @@ export function createTeamConfig(api) {
       `Team ${item.teamIdFk || "-"} / Member ${item.teamMemberIdFk || "-"}`,
     searchKeys: ["createTeamId", "teamIdFk", "teamMemberIdFk", "roleIdFk"],
     metrics: [
-      { label: "Assignments", value: count },
       {
         label: "Teams Used",
         value: (items) =>
@@ -606,28 +605,35 @@ export function createTeamConfig(api) {
         value: (items) =>
           new Set(items.map((i) => i.teamMemberIdFk).filter(Boolean)).size,
       },
-      {
-        label: "Roles Used",
-        value: (items) =>
-          new Set(items.map((i) => i.roleIdFk).filter(Boolean)).size,
-      },
     ],
     columns: [
       {
-        label: "Assignment",
-        key: "createTeamId",
+        label: "Team",
+        key: "teamIdFk",
         strong: true,
         width: "w-[34%]",
       },
-      { label: "Team ID", key: "teamIdFk", align: "right", width: "w-[22%]" },
       {
-        label: "Member ID",
+        label: "Members",
         key: "teamMemberIdFk",
         align: "right",
         width: "w-[22%]",
       },
-      { label: "Role ID", key: "roleIdFk", align: "right", width: "w-[22%]" },
+      {
+        label: "Role",
+        key: "roleIdFk",
+        align: "right",
+        width: "w-[22%]",
+      },
+      {
+        label: "Actions",
+        key: "createTeamId",
+        align: "right",
+        width: "w-[22%]",
+        // display-only; real row actions are handled by ModuleWorkspace's built-in Action column
+      },
     ],
+
     formFields: [
       { name: "teamIdFk", label: "Team ID", type: "number", required: true },
       {
