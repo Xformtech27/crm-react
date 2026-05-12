@@ -9,11 +9,7 @@ import { ACTIVITY_TYPE_COLORS } from "./activities/ActivitiesPage";
 import Icon from "../components/Icon";
 import AppModal from "../components/common/AppModal";
 import { useTask } from "../hooks/useTask";
-
-
-
-
-
+import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from "recharts";
 
 const moduleMap = {
   pipeline: {
@@ -148,50 +144,10 @@ const moduleMap = {
   },
   analytics: {
     title: "Analytics",
-    singular: "Analytics Row",
-    subtitle: "s",
+    singular: "Analytics Dashboard",
+    subtitle: "Overview of your sales & leads performance",
     icon: "mdi:chart-box-outline",
-    source: "repRanking",
-    customActions: [
-      {
-        label: "New Analytics",
-        icon: "mdi:plus-circle-outline",
-        action: "create",
-      },
-    ],
-    mapRows: (rows) =>
-      rows.map((row, index) => ({
-        ...row,
-        id: index + 1,
-        status: row.quota >= 80 ? "Strong" : "Open",
-      })),
-    primaryKey: "name",
-    secondaryKey: (item) => `${item.winRate}% win rate`,
-    statusKey: "status",
-    statusOptions: ["Strong", "Open"],
-    columns: [
-      { label: "Rep", key: "name", strong: true, width: "w-[30%]" },
-      { label: "Status", key: "status", status: true, width: "w-[18%]" },
-      {
-        label: "Pipeline",
-        key: "pipeline",
-        type: "currency",
-        align: "right",
-        width: "w-[20%]",
-      },
-      {
-        label: "Win Rate",
-        key: (item) => `${item.winRate}%`,
-        align: "right",
-        width: "w-[16%]",
-      },
-      {
-        label: "Quota",
-        key: (item) => `${item.quota}%`,
-        align: "right",
-        width: "w-[16%]",
-      },
-    ],
+    isCustomComponent: true,
   },
   reports: {
     title: "Reports",
@@ -294,8 +250,174 @@ const moduleMap = {
       { name: "note", label: "Note", type: "textarea", span: 2 },
     ],
   },
-  
 };
+
+// Analytics Dashboard Component - No external dependencies
+function AnalyticsDashboard() {
+  const { load } = useAdvancedCrmData();
+  const [stats, setStats] = useState({
+    totalRevenue: 0,
+    activeLeads: 0,
+    conversionRate: 0,
+  });
+  const [salesData, setSalesData] = useState([
+    { name: "Mon", value: 0 },
+    { name: "Tue", value: 0 },
+    { name: "Wed", value: 0 },
+    { name: "Thu", value: 0 },
+    { name: "Fri", value: 0 },
+    { name: "Sat", value: 0 },
+    { name: "Sun", value: 0 },
+  ]);
+  const [leadData, setLeadData] = useState([
+    { name: "New Leads", value: 0 },
+    { name: "Converted", value: 0 },
+    { name: "Lost", value: 0 },
+  ]);
+
+  useEffect(() => {
+    const fetchAnalyticsData = async () => {
+      try {
+        const state = await load(true);
+        
+        // Calculate revenue from deals
+        const deals = state.dealsList || [];
+        const totalRevenue = deals.reduce((sum, deal) => sum + (Number(deal.value) || 0), 0);
+        
+        // Calculate leads data (adjust based on your actual leads structure)
+        const leads = state.leadsList || [];
+        const activeLeads = leads.length;
+        const convertedLeads = leads.filter(l => l.status === "Converted" || l.stage === "Closed Won").length;
+        const lostLeads = leads.filter(l => l.status === "Lost" || l.stage === "Closed Lost").length;
+        const conversionRate = activeLeads ? ((convertedLeads / activeLeads) * 100).toFixed(1) : 0;
+        
+        setStats({
+          totalRevenue,
+          activeLeads,
+          conversionRate,
+        });
+        
+        setLeadData([
+          { name: "New Leads", value: Math.max(0, activeLeads - convertedLeads - lostLeads) },
+          { name: "Converted", value: convertedLeads },
+          { name: "Lost", value: lostLeads },
+        ]);
+        
+        // Process weekly sales data from deals closed dates
+        const weeklySales = [0, 0, 0, 0, 0, 0, 0];
+        const today = new Date();
+        const startOfWeek = new Date(today);
+        startOfWeek.setDate(today.getDate() - today.getDay());
+        
+        deals.forEach(deal => {
+          if (deal.closeDate && deal.status === "Closed Won") {
+            const closeDate = new Date(deal.closeDate);
+            if (closeDate >= startOfWeek && closeDate <= today) {
+              const dayIndex = closeDate.getDay();
+              weeklySales[dayIndex] += Number(deal.value) || 0;
+            }
+          }
+        });
+        
+        setSalesData([
+          { name: "Mon", value: weeklySales[1] },
+          { name: "Tue", value: weeklySales[2] },
+          { name: "Wed", value: weeklySales[3] },
+          { name: "Thu", value: weeklySales[4] },
+          { name: "Fri", value: weeklySales[5] },
+          { name: "Sat", value: weeklySales[6] },
+          { name: "Sun", value: weeklySales[0] },
+        ]);
+        
+      } catch (error) {
+        console.error("Error fetching analytics data:", error);
+      }
+    };
+    
+    fetchAnalyticsData();
+  }, [load]);
+
+  const COLORS = ["#6366F1", "#22C55E", "#EF4444"];
+
+  const handleExportReport = () => {
+    console.log("Exporting report...");
+    alert("Report export feature coming soon!");
+  };
+
+  // Simple Card component inline
+  const StatCard = ({ title, value }) => (
+    <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-4">
+      <p className="text-sm text-gray-500">{title}</p>
+      <h2 className="text-2xl font-bold mt-1">
+        {typeof value === 'number' && title === 'Total Revenue' ? `$${value.toLocaleString()}` : 
+         typeof value === 'number' ? value.toLocaleString() : 
+         value}
+      </h2>
+    </div>
+  );
+
+  return (
+    <div className="p-6 bg-gray-50 min-h-screen">
+      {/* Header */}
+      <div className="flex items-center justify-between mb-6">
+        <div>
+          <h1 className="text-2xl font-bold">Analytics CRM</h1>
+          <p className="text-gray-500 text-sm">Overview of your sales & leads performance</p>
+        </div>
+        <button 
+          onClick={handleExportReport}
+          className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium"
+        >
+          Export Report
+        </button>
+      </div>
+
+      {/* Stats */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+        <StatCard title="Total Revenue" value={stats.totalRevenue} />
+        <StatCard title="Active Leads" value={stats.activeLeads} />
+        <StatCard title="Conversion Rate" value={`${stats.conversionRate}%`} />
+      </div>
+
+      {/* Charts */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-4">
+          <h3 className="font-semibold mb-4">Weekly Sales</h3>
+          <ResponsiveContainer width="100%" height={300}>
+            <LineChart data={salesData}>
+              <XAxis dataKey="name" />
+              <YAxis />
+              <Tooltip 
+                formatter={(value) => [`$${value.toLocaleString()}`, "Revenue"]}
+              />
+              <Line type="monotone" dataKey="value" stroke="#6366F1" strokeWidth={3} />
+            </LineChart>
+          </ResponsiveContainer>
+        </div>
+
+        <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-4">
+          <h3 className="font-semibold mb-4">Lead Distribution</h3>
+          <ResponsiveContainer width="100%" height={300}>
+            <PieChart>
+              <Pie
+                data={leadData}
+                dataKey="value"
+                nameKey="name"
+                outerRadius={100}
+                label={({ name, percent }) => percent > 0 ? `${name}: ${(percent * 100).toFixed(0)}%` : ''}
+              >
+                {leadData.map((entry, index) => (
+                  <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                ))}
+              </Pie>
+              <Tooltip />
+            </PieChart>
+          </ResponsiveContainer>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 function CalendarMonthView() {
   const { load } = useAdvancedCrmData();
@@ -754,6 +876,13 @@ export default function AdvancedModulePage({ type }) {
   const activityApi = useActivity();
   const navigate = useNavigate();
   const definition = moduleMap[type];
+
+  // Check for custom component first
+  if (definition?.isCustomComponent) {
+    if (type === "analytics") {
+      return <AnalyticsDashboard />;
+    }
+  }
 
   const config = staticWorkspaceConfig({
     ...definition,
