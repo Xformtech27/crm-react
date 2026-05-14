@@ -68,7 +68,11 @@ const LEAD_EXPORT_FIELDS = [
   { header: "Lead ID", value: (lead) => lead.leadId },
   { header: "First Name", value: (lead) => lead.leadFirstName },
   { header: "Last Name", value: (lead) => lead.leadLastName },
-  { header: "Full Name", value: (lead) => `${lead.leadFirstName ?? ""} ${lead.leadLastName ?? ""}`.trim() },
+  {
+    header: "Full Name",
+    value: (lead) =>
+      `${lead.leadFirstName ?? ""} ${lead.leadLastName ?? ""}`.trim(),
+  },
   { header: "Title", value: (lead) => lead.leadTitle },
   { header: "Designation", value: (lead) => lead.designation },
   { header: "Mobile", value: (lead) => lead.leadMobileNo },
@@ -395,7 +399,7 @@ export default function LeadListPage() {
     setShowPanel(true);
   }
 
-async function handleSave(formData) {
+  async function handleSave(formData) {
     setModalSaving(true);
     try {
       // Backend expects multipart/form-data with a "lead" part (JSON) and optional files parts.
@@ -404,7 +408,10 @@ async function handleSave(formData) {
 
       // FIX: avoid passing the synthetic React event object to API.
       // LeadForm calls onSubmit with a plain object (handleSubmit in LeadForm.jsx).
-      const payload = formData && typeof formData === "object" && !Array.isArray(formData) ? formData : {};
+      const payload =
+        formData && typeof formData === "object" && !Array.isArray(formData)
+          ? formData
+          : {};
 
       if (editingLead?.leadId) {
         await update(editingLead.leadId, payload, safeFiles);
@@ -417,14 +424,13 @@ async function handleSave(formData) {
       await loadAll();
     } catch (err) {
       // Surface more details if available.
-      const msg = err?.response?.data?.message || err?.message || "Failed to save lead.";
+      const msg =
+        err?.response?.data?.message || err?.message || "Failed to save lead.";
       showToast("error", msg);
     } finally {
       setModalSaving(false);
     }
   }
-
-
 
   async function handleDelete() {
     if (!deleteId) return;
@@ -458,85 +464,72 @@ async function handleSave(formData) {
 
   return (
     <div className="animate-fade-in flex flex-col gap-0">
-      {/* Top Bar */}
-      <div className="flex items-center justify-between gap-4 mb-4">
-        <div className="flex items-center gap-3">
-          {/* <h1 className="text-xl font-semibold text-gray-900 leading-none">
-            Leads
-          </h1> */}
-          {/* <span className="inline-flex items-center justify-center px-2.5 py-0.5 rounded-full text-xs font-bold bg-blue-100 text-blue-700 min-w-[2rem]"> */}
-          {/* {totalCount} */}
-          {/* </span> */}
-        </div>
-        
-       
-        <div className="flex items-center gap-2">
-
-             <div className="relative w-72 mr-auto">
-          <Icon
-            name="mdi:magnify"
-            className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none"
-          />
-          <input
-            type="text"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Search name, mobile, email, org..."
-            className="pl-8 pr-3 py-2 w-full text-sm border border-gray-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400 placeholder-gray-400"
-          />
-        </div>
-
-          <Link
-            to="/lead/import"
-            className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg border border-gray-200 bg-white text-sm font-medium text-gray-700 hover:bg-gray-50 hover:border-gray-300 transition-colors shadow-sm"
-          >
-            <Icon name="mdi:cloud-upload-outline" className="w-4 h-4" />
-            Import
-          </Link>
-
-          <button
-            onClick={openCreate}
-            className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-blue-600 text-sm font-medium text-white hover:bg-blue-700 transition-colors shadow-sm shadow-blue-200"
-          >
-            <Icon name="mdi:plus" className="w-4 h-4" />
-            New Lead
-          </button>
-        </div>
-      </div>
-
       {/* Filter Bar */}
-      <div className="-mt-8 flex flex-col gap-3 mb-3">
-        <div className="-mt-4 flex flex-wrap items-center gap-2">
-          <div className="flex items-center gap-1 flex-wrap">
-            {STATUS_TABS.map((s) => (
-              <button
-                key={s}
-                onClick={() => setActiveStatus(s)}
-                className={`px-3 py-1.5 rounded-full text-xs font-semibold transition-all duration-150 border ${
-                  activeStatus === s
-                    ? "bg-blue-600 text-white border-blue-600 shadow-sm"
-                    : "bg-white text-gray-600 border-gray-200 hover:border-blue-300 hover:text-blue-600"
-                }`}
-              >
-                {s}
-              </button>
-            ))}
+      <div className="flex flex-col gap-3 mb-3">
+        <div className="flex justify-between">
+          <div className=" flex flex-wrap items-center gap-2">
+            <div className="flex items-center gap-1 flex-wrap">
+              {STATUS_TABS.map((s) => (
+                <button
+                  key={s}
+                  onClick={() => setActiveStatus(s)}
+                  className={`px-3 py-1.5 rounded-full text-xs font-semibold transition-all duration-150 border ${
+                    activeStatus === s
+                      ? "bg-blue-600 text-white border-blue-600 shadow-sm"
+                      : "bg-white text-gray-600 border-gray-200 hover:border-blue-300 hover:text-blue-600"
+                  }`}
+                >
+                  {s}
+                </button>
+              ))}
+            </div>
+
+            <select
+              value={sourceFilter}
+              onChange={(e) => setSourceFilter(e.target.value)}
+              className="text-xs border border-gray-200 rounded-lg px-3 py-1.5 bg-white text-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400"
+            >
+              <option value="">All Sources</option>
+              {LEAD_SOURCES.map((src) => (
+                <option key={src} value={src}>
+                  {src}
+                </option>
+              ))}
+            </select>
           </div>
 
-          <select
-            value={sourceFilter}
-            onChange={(e) => setSourceFilter(e.target.value)}
-            className="text-xs border border-gray-200 rounded-lg px-3 py-1.5 bg-white text-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400"
-          >
-            <option value="">All Sources</option>
-            {LEAD_SOURCES.map((src) => (
-              <option key={src} value={src}>
-                {src}
-              </option>
-            ))}
-          </select>
-        </div>
+          <div className="flex items-center gap-2">
+            <div className="relative w-72 mr-auto">
+              <Icon
+                name="mdi:magnify"
+                className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none"
+              />
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Search name, mobile, email, org..."
+                className="pl-8 pr-3 py-2 w-full text-sm border border-gray-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400 placeholder-gray-400"
+              />
+            </div>
 
+            <Link
+              to="/lead/import"
+              className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg border border-gray-200 bg-white text-sm font-medium text-gray-700 hover:bg-gray-50 hover:border-gray-300 transition-colors shadow-sm"
+            >
+              <Icon name="mdi:cloud-upload-outline" className="w-4 h-4" />
+              Import
+            </Link>
+
+            <button
+              onClick={openCreate}
+              className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-blue-600 text-sm font-medium text-white hover:bg-blue-700 transition-colors shadow-sm shadow-blue-200"
+            >
+              <Icon name="mdi:plus" className="w-4 h-4" />
+              New Lead
+            </button>
+          </div>
+        </div>
         <div className="flex flex-wrap items-center gap-2">
           <div className="flex items-center gap-1">
             <input
@@ -1417,8 +1410,7 @@ async function handleSave(formData) {
                   ref={leadFormRef}
                   initial={editingLead}
                   loading={modalSaving}
-onSubmit={handleSave}
-
+                  onSubmit={handleSave}
                 />
               </div>
               <div className="flex items-center justify-between gap-3 px-6 py-4 border-t border-gray-100 bg-gray-50/70 shrink-0">
@@ -1441,7 +1433,6 @@ onSubmit={handleSave}
                     disabled={modalSaving}
                     className="inline-flex items-center gap-2 px-6 py-2.5 rounded-lg bg-blue-600 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-60 transition-colors shadow-sm"
                   >
-
                     {modalSaving ? (
                       <Icon
                         name="mdi:loading"

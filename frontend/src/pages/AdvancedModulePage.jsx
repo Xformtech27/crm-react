@@ -20,7 +20,7 @@ const moduleMap = {
     source: "pipelineStages",
     mapRows: (rows) =>
       rows.map((row, index) => ({
-        id: index + 1,
+        id: index + 1, 
         name: row.name,
         status: row.deals.length ? "Active" : "Open",
         count: row.deals.length,
