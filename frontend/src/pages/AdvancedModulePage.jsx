@@ -362,7 +362,54 @@ function AnalyticsDashboard() {
 
   const handleExportReport = () => {
     console.log("Exporting report...");
-    alert("Report export feature coming soon!");
+    const handleExportReport = () => {
+      // Get current data from your state
+      const currentSalesData = salesData; // or salesDataState if you're using state
+      const currentLeadData = leadData; // or pieData
+      const currentStats = stats;
+
+      // Create CSV content
+      let csvContent = "";
+
+      // Add header
+      csvContent += "CRM Analytics Report\n";
+      csvContent += `Generated: ${new Date().toLocaleString()}\n\n`;
+
+      // Add summary section
+      csvContent += "SUMMARY STATISTICS\n";
+      csvContent += "--------------------\n";
+      csvContent += `Total Revenue,${currentStats.totalRevenue || "$48,320"}\n`;
+      csvContent += `Active Leads,${currentStats.activeLeads || "1,245"}\n`;
+      csvContent += `Conversion Rate,${currentStats.conversionRate || "32.4%"}\n\n`;
+
+      // Add weekly sales
+      csvContent += "WEEKLY SALES\n";
+      csvContent += "--------------------\n";
+      csvContent += "Day,Revenue (USD)\n";
+      currentSalesData.forEach((day) => {
+        csvContent += `${day.name},${day.value}\n`;
+      });
+      csvContent += "\n";
+
+      // Add lead distribution
+      csvContent += "LEAD DISTRIBUTION\n";
+      csvContent += "--------------------\n";
+      csvContent += "Category,Count\n";
+      currentLeadData.forEach((category) => {
+        csvContent += `${category.name},${category.value}\n`;
+      });
+
+      // Download file
+      const blob = new Blob([csvContent], { type: "text/csv" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `crm_report_${new Date().toISOString().split("T")[0]}.csv`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    };
   };
 
   // Simple Card component inline
