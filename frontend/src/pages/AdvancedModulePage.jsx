@@ -9,7 +9,17 @@ import { ACTIVITY_TYPE_COLORS } from "./activities/ActivitiesPage";
 import Icon from "../components/Icon";
 import AppModal from "../components/common/AppModal";
 import { useTask } from "../hooks/useTask";
-import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from "recharts";
+import {
+  LineChart,
+  Line,
+  XAxis,
+  YAxis,
+  Tooltip,
+  ResponsiveContainer,
+  PieChart,
+  Pie,
+  Cell,
+} from "recharts";
 
 const moduleMap = {
   pipeline: {
@@ -20,7 +30,7 @@ const moduleMap = {
     source: "pipelineStages",
     mapRows: (rows) =>
       rows.map((row, index) => ({
-        id: index + 1, 
+        id: index + 1,
         name: row.name,
         status: row.deals.length ? "Active" : "Open",
         count: row.deals.length,
@@ -279,37 +289,49 @@ function AnalyticsDashboard() {
     const fetchAnalyticsData = async () => {
       try {
         const state = await load(true);
-        
+
         // Calculate revenue from deals
         const deals = state.dealsList || [];
-        const totalRevenue = deals.reduce((sum, deal) => sum + (Number(deal.value) || 0), 0);
-        
+        const totalRevenue = deals.reduce(
+          (sum, deal) => sum + (Number(deal.value) || 0),
+          0,
+        );
+
         // Calculate leads data (adjust based on your actual leads structure)
         const leads = state.leadsList || [];
         const activeLeads = leads.length;
-        const convertedLeads = leads.filter(l => l.status === "Converted" || l.stage === "Closed Won").length;
-        const lostLeads = leads.filter(l => l.status === "Lost" || l.stage === "Closed Lost").length;
-        const conversionRate = activeLeads ? ((convertedLeads / activeLeads) * 100).toFixed(1) : 0;
-        
+        const convertedLeads = leads.filter(
+          (l) => l.status === "Converted" || l.stage === "Closed Won",
+        ).length;
+        const lostLeads = leads.filter(
+          (l) => l.status === "Lost" || l.stage === "Closed Lost",
+        ).length;
+        const conversionRate = activeLeads
+          ? ((convertedLeads / activeLeads) * 100).toFixed(1)
+          : 0;
+
         setStats({
           totalRevenue,
           activeLeads,
           conversionRate,
         });
-        
+
         setLeadData([
-          { name: "New Leads", value: Math.max(0, activeLeads - convertedLeads - lostLeads) },
+          {
+            name: "New Leads",
+            value: Math.max(0, activeLeads - convertedLeads - lostLeads),
+          },
           { name: "Converted", value: convertedLeads },
           { name: "Lost", value: lostLeads },
         ]);
-        
+
         // Process weekly sales data from deals closed dates
         const weeklySales = [0, 0, 0, 0, 0, 0, 0];
         const today = new Date();
         const startOfWeek = new Date(today);
         startOfWeek.setDate(today.getDate() - today.getDay());
-        
-        deals.forEach(deal => {
+
+        deals.forEach((deal) => {
           if (deal.closeDate && deal.status === "Closed Won") {
             const closeDate = new Date(deal.closeDate);
             if (closeDate >= startOfWeek && closeDate <= today) {
@@ -318,7 +340,7 @@ function AnalyticsDashboard() {
             }
           }
         });
-        
+
         setSalesData([
           { name: "Mon", value: weeklySales[1] },
           { name: "Tue", value: weeklySales[2] },
@@ -328,12 +350,11 @@ function AnalyticsDashboard() {
           { name: "Sat", value: weeklySales[6] },
           { name: "Sun", value: weeklySales[0] },
         ]);
-        
       } catch (error) {
         console.error("Error fetching analytics data:", error);
       }
     };
-    
+
     fetchAnalyticsData();
   }, [load]);
 
@@ -349,9 +370,11 @@ function AnalyticsDashboard() {
     <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-4">
       <p className="text-sm text-gray-500">{title}</p>
       <h2 className="text-2xl font-bold mt-1">
-        {typeof value === 'number' && title === 'Total Revenue' ? `$${value.toLocaleString()}` : 
-         typeof value === 'number' ? value.toLocaleString() : 
-         value}
+        {typeof value === "number" && title === "Total Revenue"
+          ? `₹${value.toLocaleString()}`
+          : typeof value === "number"
+            ? value.toLocaleString()
+            : value}
       </h2>
     </div>
   );
@@ -362,9 +385,11 @@ function AnalyticsDashboard() {
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-2xl font-bold">Analytics CRM</h1>
-          <p className="text-gray-500 text-sm">Overview of your sales & leads performance</p>
+          <p className="text-gray-500 text-sm">
+            Overview of your sales & leads performance
+          </p>
         </div>
-        <button 
+        <button
           onClick={handleExportReport}
           className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium"
         >
@@ -387,10 +412,15 @@ function AnalyticsDashboard() {
             <LineChart data={salesData}>
               <XAxis dataKey="name" />
               <YAxis />
-              <Tooltip 
-                formatter={(value) => [`$${value.toLocaleString()}`, "Revenue"]}
+              <Tooltip
+                formatter={(value) => [`₹${value.toLocaleString()}`, "Revenue"]}
               />
-              <Line type="monotone" dataKey="value" stroke="#6366F1" strokeWidth={3} />
+              <Line
+                type="monotone"
+                dataKey="value"
+                stroke="#6366F1"
+                strokeWidth={3}
+              />
             </LineChart>
           </ResponsiveContainer>
         </div>
@@ -404,10 +434,15 @@ function AnalyticsDashboard() {
                 dataKey="value"
                 nameKey="name"
                 outerRadius={100}
-                label={({ name, percent }) => percent > 0 ? `${name}: ${(percent * 100).toFixed(0)}%` : ''}
+                label={({ name, percent }) =>
+                  percent > 0 ? `${name}: ${(percent * 100).toFixed(0)}%` : ""
+                }
               >
                 {leadData.map((entry, index) => (
-                  <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                  <Cell
+                    key={`cell-${index}`}
+                    fill={COLORS[index % COLORS.length]}
+                  />
                 ))}
               </Pie>
               <Tooltip />

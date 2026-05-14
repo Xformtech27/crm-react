@@ -26,9 +26,7 @@ function StatCard({ title, value, icon, trend }) {
         <div>
           <p className="text-sm text-gray-500">{title}</p>
 
-          <h2 className="text-3xl font-bold text-gray-900 mt-2">
-            {value}
-          </h2>
+          <h2 className="text-3xl font-bold text-gray-900 mt-2">{value}</h2>
 
           <div className="mt-2 flex items-center gap-1 text-sm text-green-600">
             <Icon name="mdi:trending-up" className="w-4 h-4" />
@@ -72,11 +70,11 @@ export default function ReportsPage() {
 
     const totalRevenue = deals.reduce(
       (sum, d) => sum + Number(d.value || 0),
-      0
+      0,
     );
 
     const wonDeals = deals.filter(
-      (d) => String(d.stage).toLowerCase() === "won"
+      (d) => String(d.stage).toLowerCase() === "won",
     );
 
     const pipelineData =
@@ -85,12 +83,10 @@ export default function ReportsPage() {
         deals: stage.deals.length,
       })) || [];
 
-    const activityData = ["Call", "Meeting", "Email", "Note"].map(
-      (type) => ({
-        name: type,
-        value: activities.filter((a) => a.type === type).length,
-      })
-    );
+    const activityData = ["Call", "Meeting", "Email", "Note"].map((type) => ({
+      name: type,
+      value: activities.filter((a) => a.type === type).length,
+    }));
 
     const salesPerformance = reps.map((r) => ({
       name: r.name,
@@ -141,8 +137,8 @@ export default function ReportsPage() {
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-5">
         <StatCard
           title="Revenue"
-          value={`$${analytics.totalRevenue.toLocaleString()}`}
-          icon="mdi:currency-usd"
+          value={`₹${analytics.totalRevenue.toLocaleString()}`}
+          icon="mdi:currency-inr"
           trend="+12%"
         />
 
@@ -172,9 +168,7 @@ export default function ReportsPage() {
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
         {/* PIPELINE */}
         <div className="xl:col-span-2 bg-white rounded-2xl border border-gray-200 p-5 shadow-sm">
-          <h2 className="text-lg font-semibold mb-4">
-            Pipeline Overview
-          </h2>
+          <h2 className="text-lg font-semibold mb-4">Pipeline Overview</h2>
 
           <div className="h-[300px]">
             <ResponsiveContainer width="100%" height="100%">
@@ -191,9 +185,7 @@ export default function ReportsPage() {
 
         {/* ACTIVITIES */}
         <div className="bg-white rounded-2xl border border-gray-200 p-5 shadow-sm">
-          <h2 className="text-lg font-semibold mb-4">
-            Activities
-          </h2>
+          <h2 className="text-lg font-semibold mb-4">Activities</h2>
 
           <div className="h-[300px]">
             <ResponsiveContainer width="100%" height="100%">
@@ -205,10 +197,7 @@ export default function ReportsPage() {
                   label
                 >
                   {analytics.activityData.map((entry, index) => (
-                    <Cell
-                      key={index}
-                      fill={COLORS[index % COLORS.length]}
-                    />
+                    <Cell key={index} fill={COLORS[index % COLORS.length]} />
                   ))}
                 </Pie>
 
@@ -221,9 +210,7 @@ export default function ReportsPage() {
 
       {/* SALES PERFORMANCE */}
       <div className="bg-white rounded-2xl border border-gray-200 p-5 shadow-sm">
-        <h2 className="text-lg font-semibold mb-4">
-          Sales Performance
-        </h2>
+        <h2 className="text-lg font-semibold mb-4">Sales Performance</h2>
 
         <div className="h-[300px]">
           <ResponsiveContainer width="100%" height="100%">
@@ -247,9 +234,7 @@ export default function ReportsPage() {
       {/* REPORT TABLE */}
       <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
         <div className="p-5 border-b border-gray-100">
-          <h2 className="text-lg font-semibold">
-            Recent Reports
-          </h2>
+          <h2 className="text-lg font-semibold">Recent Reports</h2>
         </div>
 
         <div className="overflow-x-auto">
@@ -269,17 +254,11 @@ export default function ReportsPage() {
                   key={index}
                   className="border-t border-gray-100 hover:bg-gray-50"
                 >
-                  <td className="px-5 py-4 font-medium">
-                    {report.title}
-                  </td>
+                  <td className="px-5 py-4 font-medium">{report.title}</td>
 
-                  <td className="px-5 py-4">
-                    {report.category}
-                  </td>
+                  <td className="px-5 py-4">{report.category}</td>
 
-                  <td className="px-5 py-4">
-                    {report.uses}
-                  </td>
+                  <td className="px-5 py-4">{report.uses}</td>
 
                   <td className="px-5 py-4 text-gray-500">
                     {report.description}
