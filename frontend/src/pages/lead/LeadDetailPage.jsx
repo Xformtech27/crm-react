@@ -392,11 +392,15 @@ export default function LeadDetailPage() {
     e.preventDefault();
     if (!reminderText.trim() || !reminderDate) return;
     setActionLoading(true);
+    const dateObj = new Date(reminderDate);
+ 
+        const formattedDate = dateObj.toISOString().replace('Z', '').split('.')[0];
+ 
     try {
       const rem = await addReminder(
         id,
         reminderText.trim(),
-        new Date(reminderDate).toISOString(),
+        formattedDate
       );
       setReminders((p) => [rem, ...p]);
       setReminderText("");
