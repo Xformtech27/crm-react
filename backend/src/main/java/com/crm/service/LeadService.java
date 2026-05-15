@@ -29,6 +29,8 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.time.Instant;
+import java.time.ZoneId;
 
 @Slf4j
 @Service
@@ -63,8 +65,8 @@ public class LeadService {
     }
 
     public Lead createLead(LeadRequest request, Long userId,
-                           MultipartFile doc, MultipartFile doc1,
-                           MultipartFile doc2, MultipartFile doc3) throws IOException {
+            MultipartFile doc, MultipartFile doc1,
+            MultipartFile doc2, MultipartFile doc3) throws IOException {
         Lead lead = mapToEntity(request, new Lead());
         lead.setUserIdFk(userId);
         lead.setLeadCreatedDate(LocalDateTime.now());
@@ -78,14 +80,18 @@ public class LeadService {
     }
 
     public Lead updateLead(Long id, LeadRequest request, Long userId,
-                           MultipartFile doc, MultipartFile doc1,
-                           MultipartFile doc2, MultipartFile doc3) throws IOException {
+            MultipartFile doc, MultipartFile doc1,
+            MultipartFile doc2, MultipartFile doc3) throws IOException {
         Lead lead = getLeadById(id);
         mapToEntity(request, lead);
-        if (doc  != null && !doc.isEmpty())  lead.setUploadDocument(fileUploadUtil.upload(doc));
-        if (doc1 != null && !doc1.isEmpty()) lead.setUploadDocument1(fileUploadUtil.upload(doc1));
-        if (doc2 != null && !doc2.isEmpty()) lead.setUploadDocument2(fileUploadUtil.upload(doc2));
-        if (doc3 != null && !doc3.isEmpty()) lead.setUploadDocument3(fileUploadUtil.upload(doc3));
+        if (doc != null && !doc.isEmpty())
+            lead.setUploadDocument(fileUploadUtil.upload(doc));
+        if (doc1 != null && !doc1.isEmpty())
+            lead.setUploadDocument1(fileUploadUtil.upload(doc1));
+        if (doc2 != null && !doc2.isEmpty())
+            lead.setUploadDocument2(fileUploadUtil.upload(doc2));
+        if (doc3 != null && !doc3.isEmpty())
+            lead.setUploadDocument3(fileUploadUtil.upload(doc3));
         Lead saved = leadRepository.save(lead);
         leadScoringService.scoreAndCache(saved.getLeadId());
         return saved;
@@ -142,7 +148,7 @@ public class LeadService {
         LeadReminder reminder = LeadReminder.builder()
                 .leadIdFk(leadId)
                 .reminderText(reminderText)
-                .reminderDate(reminderDate != null ? java.time.LocalDateTime.parse(reminderDate.length() == 10 ? reminderDate + "T00:00:00" : reminderDate) : LocalDateTime.now())
+                .reminderDate(reminderDate != null ? parseReminderDate(reminderDate) : LocalDateTime.now())
                 .userIdFk(userId)
                 .build();
         return leadReminderRepository.save(reminder);
@@ -180,15 +186,18 @@ public class LeadService {
                     .bodyToMono(Map.class)
                     .block();
 
-            if (response == null) return imported;
+            if (response == null)
+                return imported;
 
             Object dataObj = response.get("DATA");
-            if (!(dataObj instanceof List)) return imported;
+            if (!(dataObj instanceof List))
+                return imported;
             List<Map<String, Object>> data = (List<Map<String, Object>>) dataObj;
 
             for (Map<String, Object> item : data) {
                 String queryId = String.valueOf(item.getOrDefault("UNIQUE_QUERY_ID", ""));
-                if (leadRepository.existsByUniqueQueryId(queryId)) continue;
+                if (leadRepository.existsByUniqueQueryId(queryId))
+                    continue;
 
                 Lead lead = Lead.builder()
                         .leadFirstName(String.valueOf(item.getOrDefault("SENDER_NAME", "")))
@@ -215,6 +224,16 @@ public class LeadService {
             throw new BadRequestException("Failed to import leads from Indiamart: " + e.getMessage());
         }
         return imported;
+    }
+
+    private LocalDateTime parseReminderDate(String raw) {
+        if (raw == null)
+            return LocalDateTime.now();
+        String s = raw.trim();
+        // Handle date-only (yyyy-MM-dd)
+        if (s.length() == 10)
+            return LocalDateTime.parse(s + "T00:00:00");
+        return LocalDateTime.parse(s);
     }
 
     private Lead mapToEntity(LeadRequest req, Lead lead) {

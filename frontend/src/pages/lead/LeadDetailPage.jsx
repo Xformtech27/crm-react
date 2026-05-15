@@ -387,27 +387,41 @@ export default function LeadDetailPage() {
     setNotes((p) => p.filter((n) => n.leadNoteId !== noteId));
     showToastMsg("success", "Note deleted.");
   }
-
-  async function submitReminder(e) {
+async function submitReminder(e) {
     e.preventDefault();
     if (!reminderText.trim() || !reminderDate) return;
     setActionLoading(true);
+    
     try {
-      const rem = await addReminder(
-        id,
-        reminderText.trim(),
-        new Date(reminderDate).toISOString(),
-      );
-      setReminders((p) => [rem, ...p]);
-      setReminderText("");
-      setReminderDate("");
-      showToastMsg("success", "Reminder added.");
-    } catch {
-      showToastMsg("error", "Failed to add reminder.");
+        const dateObj = new Date(reminderDate);
+        
+        // Validate date
+        if (isNaN(dateObj.getTime())) {
+            showToastMsg("error", "Invalid date format");
+            return;
+        }
+        
+        // Format date consistently for the API
+        const formattedDate = dateObj.toISOString().replace('Z', '').split('.')[0];
+        
+        // USE the formattedDate variable here, not new Date() again
+        const rem = await addReminder(
+            id,
+            reminderText.trim(),
+            formattedDate  // Use the formatted date, not new Date(reminderDate).toISOString()
+        );
+        
+        setReminders((p) => [rem, ...p]);
+        setReminderText("");
+        setReminderDate("");
+        showToastMsg("success", "Reminder added successfully.");
+    } catch (error) {
+        console.error("Failed to add reminder:", error);
+        showToastMsg("error", error.message || "Failed to add reminder.");
     } finally {
-      setActionLoading(false);
+        setActionLoading(false);
     }
-  }
+}
 
   function toggleReminderDone(reminderId) {
     setReminderDone((p) => ({ ...p, [reminderId]: !p[reminderId] }));

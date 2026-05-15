@@ -405,7 +405,7 @@ export default function ModuleWorkspace({ config, hidePrimaryAction }) {
           )}
         </div>
       </div>
-
+       
       {!!metrics.length && items.length > 0 && (
         <section className="mb-3 grid grid-cols-2 gap-2 lg:grid-cols-4">
           {metrics.map((metric) => (

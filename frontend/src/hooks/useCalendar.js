@@ -9,5 +9,6 @@ export function useCalendar() {
   const getAllEvents = () => api.get("/calendar/all");
   const deleteEvent = (id, type) =>
     api.del(`/calendar/events/${id}?type=${encodeURIComponent(type)}`);
+
   return { getEvents, getAllEvents, deleteEvent };
 }

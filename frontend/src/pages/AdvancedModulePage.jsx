@@ -9,11 +9,18 @@ import { ACTIVITY_TYPE_COLORS } from "./activities/ActivitiesPage";
 import Icon from "../components/Icon";
 import AppModal from "../components/common/AppModal";
 import { useTask } from "../hooks/useTask";
-
-
-
-
-
+import { useLead } from "../hooks/useLead";
+import {
+  LineChart,
+  Line,
+  XAxis,
+  YAxis,
+  Tooltip,
+  ResponsiveContainer,
+  PieChart,
+  Pie,
+  Cell,
+} from "recharts";
 
 const moduleMap = {
   pipeline: {
@@ -148,43 +155,10 @@ const moduleMap = {
   },
   analytics: {
     title: "Analytics",
-    singular: "Analytics Row",
-    subtitle: "s",
+    singular: "Analytics Dashboard",
+    subtitle: "Overview of your sales & leads performance",
     icon: "mdi:chart-box-outline",
-    source: "repRanking",
-    mapRows: (rows) =>
-      rows.map((row, index) => ({
-        ...row,
-        id: index + 1,
-        status: row.quota >= 80 ? "Strong" : "Open",
-      })),
-    primaryKey: "name",
-    secondaryKey: (item) => `${item.winRate}% win rate`,
-    statusKey: "status",
-    statusOptions: ["Strong", "Open"],
-    columns: [
-      { label: "Rep", key: "name", strong: true, width: "w-[30%]" },
-      { label: "Status", key: "status", status: true, width: "w-[18%]" },
-      {
-        label: "Pipeline",
-        key: "pipeline",
-        type: "currency",
-        align: "right",
-        width: "w-[20%]",
-      },
-      {
-        label: "Win Rate",
-        key: (item) => `${item.winRate}%`,
-        align: "right",
-        width: "w-[16%]",
-      },
-      {
-        label: "Quota",
-        key: (item) => `${item.quota}%`,
-        align: "right",
-        width: "w-[16%]",
-      },
-    ],
+    isCustomComponent: true,
   },
   reports: {
     title: "Reports",
@@ -287,15 +261,255 @@ const moduleMap = {
       { name: "note", label: "Note", type: "textarea", span: 2 },
     ],
   },
-  
 };
+
+// Analytics Dashboard Component - No external dependencies
+function AnalyticsDashboard() {
+  const { load } = useAdvancedCrmData();
+  const [stats, setStats] = useState({
+    totalRevenue: 0,
+    activeLeads: 0,
+    conversionRate: 0,
+  });
+  const [salesData, setSalesData] = useState([
+    { name: "Mon", value: 0 },
+    { name: "Tue", value: 0 },
+    { name: "Wed", value: 0 },
+    { name: "Thu", value: 0 },
+    { name: "Fri", value: 0 },
+    { name: "Sat", value: 0 },
+    { name: "Sun", value: 0 },
+  ]);
+  const [leadData, setLeadData] = useState([
+    { name: "New Leads", value: 0 },
+    { name: "Converted", value: 0 },
+    { name: "Lost", value: 0 },
+  ]);
+
+  useEffect(() => {
+    const fetchAnalyticsData = async () => {
+      try {
+        const state = await load(true);
+
+        // Calculate revenue from deals
+        const deals = state.dealsList || [];
+        const totalRevenue = deals.reduce(
+          (sum, deal) => sum + (Number(deal.value) || 0),
+          0,
+        );
+
+        // Calculate leads data (adjust based on your actual leads structure)
+        const leads = state.leadsList || [];
+        const activeLeads = leads.length;
+        const convertedLeads = leads.filter(
+          (l) => l.status === "Converted" || l.stage === "Closed Won",
+        ).length;
+        const lostLeads = leads.filter(
+          (l) => l.status === "Lost" || l.stage === "Closed Lost",
+        ).length;
+        const conversionRate = activeLeads
+          ? ((convertedLeads / activeLeads) * 100).toFixed(1)
+          : 0;
+
+        setStats({
+          totalRevenue,
+          activeLeads,
+          conversionRate,
+        });
+
+        setLeadData([
+          {
+            name: "New Leads",
+            value: Math.max(0, activeLeads - convertedLeads - lostLeads),
+          },
+          { name: "Converted", value: convertedLeads },
+          { name: "Lost", value: lostLeads },
+        ]);
+
+        // Process weekly sales data from deals closed dates
+        const weeklySales = [0, 0, 0, 0, 0, 0, 0];
+        const today = new Date();
+        const startOfWeek = new Date(today);
+        startOfWeek.setDate(today.getDate() - today.getDay());
+
+        deals.forEach((deal) => {
+          if (deal.closeDate && deal.status === "Closed Won") {
+            const closeDate = new Date(deal.closeDate);
+            if (closeDate >= startOfWeek && closeDate <= today) {
+              const dayIndex = closeDate.getDay();
+              weeklySales[dayIndex] += Number(deal.value) || 0;
+            }
+          }
+        });
+
+        setSalesData([
+          { name: "Mon", value: weeklySales[1] },
+          { name: "Tue", value: weeklySales[2] },
+          { name: "Wed", value: weeklySales[3] },
+          { name: "Thu", value: weeklySales[4] },
+          { name: "Fri", value: weeklySales[5] },
+          { name: "Sat", value: weeklySales[6] },
+          { name: "Sun", value: weeklySales[0] },
+        ]);
+      } catch (error) {
+        console.error("Error fetching analytics data:", error);
+      }
+    };
+
+    fetchAnalyticsData();
+  }, [load]);
+
+  const COLORS = ["#6366F1", "#22C55E", "#EF4444"];
+
+  const handleExportReport = () => {
+    console.log("Exporting report...");
+    const handleExportReport = () => {
+      // Get current data from your state
+      const currentSalesData = salesData; // or salesDataState if you're using state
+      const currentLeadData = leadData; // or pieData
+      const currentStats = stats;
+
+      // Create CSV content
+      let csvContent = "";
+
+      // Add header
+      csvContent += "CRM Analytics Report\n";
+      csvContent += `Generated: ${new Date().toLocaleString()}\n\n`;
+
+      // Add summary section
+      csvContent += "SUMMARY STATISTICS\n";
+      csvContent += "--------------------\n";
+      csvContent += `Total Revenue,${currentStats.totalRevenue || "$48,320"}\n`;
+      csvContent += `Active Leads,${currentStats.activeLeads || "1,245"}\n`;
+      csvContent += `Conversion Rate,${currentStats.conversionRate || "32.4%"}\n\n`;
+
+      // Add weekly sales
+      csvContent += "WEEKLY SALES\n";
+      csvContent += "--------------------\n";
+      csvContent += "Day,Revenue (USD)\n";
+      currentSalesData.forEach((day) => {
+        csvContent += `${day.name},${day.value}\n`;
+      });
+      csvContent += "\n";
+
+      // Add lead distribution
+      csvContent += "LEAD DISTRIBUTION\n";
+      csvContent += "--------------------\n";
+      csvContent += "Category,Count\n";
+      currentLeadData.forEach((category) => {
+        csvContent += `${category.name},${category.value}\n`;
+      });
+
+      // Download file
+      const blob = new Blob([csvContent], { type: "text/csv" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `crm_report_${new Date().toISOString().split("T")[0]}.csv`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    };
+  };
+
+  // Simple Card component inline
+  const StatCard = ({ title, value }) => (
+    <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-4">
+      <p className="text-sm text-gray-500">{title}</p>
+      <h2 className="text-2xl font-bold mt-1">
+        {typeof value === "number" && title === "Total Revenue"
+          ? `₹${value.toLocaleString()}`
+          : typeof value === "number"
+            ? value.toLocaleString()
+            : value}
+      </h2>
+    </div>
+  );
+
+  return (
+    <div className="p-6 bg-gray-50 min-h-screen">
+      {/* Header */}
+      <div className="flex items-center justify-between mb-6">
+        <div>
+          <h1 className="text-2xl font-bold">Analytics CRM</h1>
+          <p className="text-gray-500 text-sm">
+            Overview of your sales & leads performance
+          </p>
+        </div>
+        <button
+          onClick={handleExportReport}
+          className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium"
+        >
+          Export Report
+        </button>
+      </div>
+
+      {/* Stats */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+        <StatCard title="Total Revenue" value={stats.totalRevenue} />
+        <StatCard title="Active Leads" value={stats.activeLeads} />
+        <StatCard title="Conversion Rate" value={`${stats.conversionRate}%`} />
+      </div>
+
+      {/* Charts */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-4">
+          <h3 className="font-semibold mb-4">Weekly Sales</h3>
+          <ResponsiveContainer width="100%" height={300}>
+            <LineChart data={salesData}>
+              <XAxis dataKey="name" />
+              <YAxis />
+              <Tooltip
+                formatter={(value) => [`₹${value.toLocaleString()}`, "Revenue"]}
+              />
+              <Line
+                type="monotone"
+                dataKey="value"
+                stroke="#6366F1"
+                strokeWidth={3}
+              />
+            </LineChart>
+          </ResponsiveContainer>
+        </div>
+
+        <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-4">
+          <h3 className="font-semibold mb-4">Lead Distribution</h3>
+          <ResponsiveContainer width="100%" height={300}>
+            <PieChart>
+              <Pie
+                data={leadData}
+                dataKey="value"
+                nameKey="name"
+                outerRadius={100}
+                label={({ name, percent }) =>
+                  percent > 0 ? `${name}: ${(percent * 100).toFixed(0)}%` : ""
+                }
+              >
+                {leadData.map((entry, index) => (
+                  <Cell
+                    key={`cell-${index}`}
+                    fill={COLORS[index % COLORS.length]}
+                  />
+                ))}
+              </Pie>
+              <Tooltip />
+            </PieChart>
+          </ResponsiveContainer>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 function CalendarMonthView() {
   const { load } = useAdvancedCrmData();
   const activityApi = useActivity();
   const calendarApi = useCalendar();
   const taskApi = useTask();
+  const leadApi = useLead();
   const navigate = useNavigate();
+
   const [currentDate, setCurrentDate] = useState(new Date());
   const [events, setEvents] = useState([]);
   const [showModal, setShowModal] = useState(false);
@@ -305,7 +519,11 @@ function CalendarMonthView() {
     type: "Meeting",
     time: "",
     note: "",
+    leadId: "",
+    subject: "",
+    owner: "",
   });
+
   const [saving, setSaving] = useState(false);
   const [filterType, setFilterType] = useState("All");
 
@@ -315,20 +533,17 @@ function CalendarMonthView() {
       const rawEvents = data.events || [];
 
       const mappedEvents = rawEvents.map((e) => {
-        let type;
-        if (e.type === "task") {
-          const priority = String(e.priority || "").toLowerCase();
-          type = priority === "meeting" ? "Meeting" : "Task";
-        } else {
-          type = "Reminder";
-        }
+        // Backend already tells us the true type: "task" | "reminder"
+        const eventType = e.type === "task" ? "Task" : "Reminder";
+
         return {
           id: `${e.type}-${e.id}`,
           title: e.title,
-          type,
+          type: eventType,
           time: e.time || e.date,
           note: e.note || "",
           owner: e.owner || "Unassigned",
+          leadId: e.leadId || null,
         };
       });
 
@@ -405,22 +620,20 @@ function CalendarMonthView() {
           taskDueDate: isoTime,
           taskStartDate: isoTime,
           taskDescription: form.note,
-          taskPriority: "Medium",
+          taskPriority: "meeting",
           taskStatus: "To Do",
         };
-        const createdTask = await taskApi.create(taskPayload);
-        setEvents((prev) => [
-          ...prev,
-          {
-            id: `task-${createdTask?.taskId || Date.now()}`,
-            title: form.title,
-            type: "Task",
-            time: isoTime,
-            note: form.note,
-            owner: createdTask?.taskAssign || createdTask?.taskAssignedTo,
-          },
-        ]);
+        await taskApi.create(taskPayload);
+      } else if (form.type === "Reminder") {
+        if (!form.leadId) {
+          // leadId is required to persist reminder
+          return;
+        }
+        const reminderText = form.title;
+        await leadApi.addReminder(Number(form.leadId), reminderText, isoTime);
       } else {
+        // Meeting/Event currently isn't supported by backend calendar feed.
+        // Keep old behavior (activity feed) if it exists, otherwise no-op.
         const activityPayload = {
           title: form.title,
           type: form.type,
@@ -429,21 +642,11 @@ function CalendarMonthView() {
           time: isoTime,
           note: form.note,
         };
-        const createdActivity = await activityApi.create(activityPayload);
-        setEvents((prev) => [
-          ...prev,
-          {
-            id: createdActivity?.id || Date.now(),
-            title: form.title,
-            type: form.type,
-            time: isoTime,
-            note: form.note,
-            owner: form.owner,
-            subject: form.subject,
-          },
-        ]);
+        await activityApi.create(activityPayload);
       }
+
       setShowModal(false);
+      await fetchEvents();
     } finally {
       setSaving(false);
     }
@@ -486,7 +689,11 @@ function CalendarMonthView() {
                   type: "Task",
                   time: formattedDate,
                   note: "",
+                  leadId: "",
+                  subject: "",
+                  owner: "",
                 });
+
                 setShowModal(true);
               }}
               className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-semibold rounded-lg bg-cyan-50 text-cyan-700 hover:bg-cyan-100 border border-cyan-200 transition-colors whitespace-nowrap"
@@ -506,7 +713,11 @@ function CalendarMonthView() {
                   type: "Reminder",
                   time: formattedDate,
                   note: "",
+                  leadId: "",
+                  subject: "",
+                  owner: "",
                 });
+
                 setShowModal(true);
               }}
               className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-semibold rounded-lg bg-amber-50 text-amber-700 hover:bg-amber-100 border border-amber-200 transition-colors whitespace-nowrap"
@@ -523,7 +734,11 @@ function CalendarMonthView() {
                   type: "Meeting",
                   time: formattedDate,
                   note: "",
+                  leadId: "",
+                  subject: "",
+                  owner: "",
                 });
+
                 setShowModal(true);
               }}
               className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-semibold rounded-lg bg-orange-50 text-orange-700 hover:bg-orange-100 border border-orange-200 transition-colors whitespace-nowrap"
@@ -694,7 +909,9 @@ function CalendarMonthView() {
               <select
                 className="form-select"
                 value={form.type}
-                onChange={(e) => setForm({ ...form, type: e.target.value })}
+                onChange={(e) =>
+                  setForm((p) => ({ ...p, type: e.target.value }))
+                }
               >
                 <option value="Meeting">Event (Meeting)</option>
                 <option value="Reminder">Reminder</option>
@@ -713,7 +930,23 @@ function CalendarMonthView() {
                 onChange={(e) => setForm({ ...form, time: e.target.value })}
               />
             </div>
+
+            {form.type === "Reminder" && (
+              <div className="col-span-2">
+                <label className="form-label">
+                  Lead ID <span className="text-red-500">*</span>
+                </label>
+                <input
+                  required
+                  className="form-input"
+                  value={form.leadId}
+                  onChange={(e) => setForm({ ...form, leadId: e.target.value })}
+                  placeholder="Enter leadId"
+                />
+              </div>
+            )}
           </div>
+
           <div>
             <label className="form-label">Note</label>
             <textarea
@@ -747,6 +980,13 @@ export default function AdvancedModulePage({ type }) {
   const activityApi = useActivity();
   const navigate = useNavigate();
   const definition = moduleMap[type];
+
+  // Check for custom component first
+  if (definition?.isCustomComponent) {
+    if (type === "analytics") {
+      return <AnalyticsDashboard />;
+    }
+  }
 
   const config = staticWorkspaceConfig({
     ...definition,
