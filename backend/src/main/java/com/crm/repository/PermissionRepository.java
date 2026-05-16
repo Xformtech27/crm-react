@@ -4,11 +4,12 @@ import com.crm.entity.Permission;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
 
-import java.util.List;
+import java.util.Optional;
 
 @Repository
 public interface PermissionRepository extends JpaRepository<Permission, Long> {
-    List<Permission> findByRoleIdFk(Long roleIdFk);
-    boolean existsByRoleIdFkAndGrpPerm(Long roleIdFk, String grpPerm);
-    void deleteByRoleIdFk(Long roleIdFk);
+    boolean existsByModuleNameAndActionName(String moduleName, String actionName);
+
+    Optional<Permission> findByModuleNameAndActionName(String moduleName, String actionName);
 }
+
