@@ -525,17 +525,22 @@ function CalendarMonthView() {
         calendarApi.getAllEvents().catch(() => ({ events: [] })),
         taskApi.getAll().catch(() => []),
       ]);
-      const taskEvents = (Array.isArray(savedTasks) ? savedTasks : []).map((task) => ({
-        type: "task",
-        id: task.taskId,
-        title: task.taskName,
-        date: task.taskDueDate || task.taskStartDate || task.taskCompletedDate,
-        priority: task.taskPriority,
-        status: task.taskPercentageCompleted,
-        note: task.taskDescription,
-        owner: task.taskAssign || task.taskAssignedTo,
-      }));
-      const reminderEvents = (calendarData.events || []).filter((event) => event.type !== "task");
+      const taskEvents = (Array.isArray(savedTasks) ? savedTasks : []).map(
+        (task) => ({
+          type: "task",
+          id: task.taskId,
+          title: task.taskName,
+          date:
+            task.taskDueDate || task.taskStartDate || task.taskCompletedDate,
+          priority: task.taskPriority,
+          status: task.taskPercentageCompleted,
+          note: task.taskDescription,
+          owner: task.taskAssign || task.taskAssignedTo,
+        }),
+      );
+      const reminderEvents = (calendarData.events || []).filter(
+        (event) => event.type !== "task",
+      );
       const rawEvents = [...taskEvents, ...reminderEvents];
 
       const mappedEvents = rawEvents.map((e) => {
