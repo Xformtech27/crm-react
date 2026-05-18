@@ -9,7 +9,6 @@ import { ACTIVITY_TYPE_COLORS } from "./activities/ActivitiesPage";
 import Icon from "../components/Icon";
 import AppModal from "../components/common/AppModal";
 import { useTask } from "../hooks/useTask";
-import { useLead } from "../hooks/useLead";
 import {
   LineChart,
   Line,
@@ -507,9 +506,7 @@ function CalendarMonthView() {
   const activityApi = useActivity();
   const calendarApi = useCalendar();
   const taskApi = useTask();
-  const leadApi = useLead();
   const navigate = useNavigate();
-
   const [currentDate, setCurrentDate] = useState(new Date());
   const [events, setEvents] = useState([]);
   const [showModal, setShowModal] = useState(false);
@@ -519,11 +516,7 @@ function CalendarMonthView() {
     type: "Meeting",
     time: "",
     note: "",
-    leadId: "",
-    subject: "",
-    owner: "",
   });
-
   const [saving, setSaving] = useState(false);
   const [filterType, setFilterType] = useState("All");
 
@@ -533,17 +526,20 @@ function CalendarMonthView() {
       const rawEvents = data.events || [];
 
       const mappedEvents = rawEvents.map((e) => {
-        // Backend already tells us the true type: "task" | "reminder"
-        const eventType = e.type === "task" ? "Task" : "Reminder";
-
+        let type;
+        if (e.type === "task") {
+          const priority = String(e.priority || "").toLowerCase();
+          type = priority === "meeting" ? "Meeting" : "Task";
+        } else {
+          type = "Reminder";
+        }
         return {
           id: `${e.type}-${e.id}`,
           title: e.title,
-          type: eventType,
+          type,
           time: e.time || e.date,
           note: e.note || "",
           owner: e.owner || "Unassigned",
-          leadId: e.leadId || null,
         };
       });
 
@@ -620,20 +616,22 @@ function CalendarMonthView() {
           taskDueDate: isoTime,
           taskStartDate: isoTime,
           taskDescription: form.note,
-          taskPriority: "meeting",
+          taskPriority: "Medium",
           taskStatus: "To Do",
         };
-        await taskApi.create(taskPayload);
-      } else if (form.type === "Reminder") {
-        if (!form.leadId) {
-          // leadId is required to persist reminder
-          return;
-        }
-        const reminderText = form.title;
-        await leadApi.addReminder(Number(form.leadId), reminderText, isoTime);
+        const createdTask = await taskApi.create(taskPayload);
+        setEvents((prev) => [
+          ...prev,
+          {
+            id: `task-${createdTask?.taskId || Date.now()}`,
+            title: form.title,
+            type: "Task",
+            time: isoTime,
+            note: form.note,
+            owner: createdTask?.taskAssign || createdTask?.taskAssignedTo,
+          },
+        ]);
       } else {
-        // Meeting/Event currently isn't supported by backend calendar feed.
-        // Keep old behavior (activity feed) if it exists, otherwise no-op.
         const activityPayload = {
           title: form.title,
           type: form.type,
@@ -642,11 +640,21 @@ function CalendarMonthView() {
           time: isoTime,
           note: form.note,
         };
-        await activityApi.create(activityPayload);
+        const createdActivity = await activityApi.create(activityPayload);
+        setEvents((prev) => [
+          ...prev,
+          {
+            id: createdActivity?.id || Date.now(),
+            title: form.title,
+            type: form.type,
+            time: isoTime,
+            note: form.note,
+            owner: form.owner,
+            subject: form.subject,
+          },
+        ]);
       }
-
       setShowModal(false);
-      await fetchEvents();
     } finally {
       setSaving(false);
     }
@@ -689,11 +697,7 @@ function CalendarMonthView() {
                   type: "Task",
                   time: formattedDate,
                   note: "",
-                  leadId: "",
-                  subject: "",
-                  owner: "",
                 });
-
                 setShowModal(true);
               }}
               className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-semibold rounded-lg bg-cyan-50 text-cyan-700 hover:bg-cyan-100 border border-cyan-200 transition-colors whitespace-nowrap"
@@ -713,11 +717,7 @@ function CalendarMonthView() {
                   type: "Reminder",
                   time: formattedDate,
                   note: "",
-                  leadId: "",
-                  subject: "",
-                  owner: "",
                 });
-
                 setShowModal(true);
               }}
               className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-semibold rounded-lg bg-amber-50 text-amber-700 hover:bg-amber-100 border border-amber-200 transition-colors whitespace-nowrap"
@@ -734,11 +734,7 @@ function CalendarMonthView() {
                   type: "Meeting",
                   time: formattedDate,
                   note: "",
-                  leadId: "",
-                  subject: "",
-                  owner: "",
                 });
-
                 setShowModal(true);
               }}
               className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-semibold rounded-lg bg-orange-50 text-orange-700 hover:bg-orange-100 border border-orange-200 transition-colors whitespace-nowrap"
@@ -909,9 +905,7 @@ function CalendarMonthView() {
               <select
                 className="form-select"
                 value={form.type}
-                onChange={(e) =>
-                  setForm((p) => ({ ...p, type: e.target.value }))
-                }
+                onChange={(e) => setForm({ ...form, type: e.target.value })}
               >
                 <option value="Meeting">Event (Meeting)</option>
                 <option value="Reminder">Reminder</option>
@@ -930,23 +924,7 @@ function CalendarMonthView() {
                 onChange={(e) => setForm({ ...form, time: e.target.value })}
               />
             </div>
-
-            {form.type === "Reminder" && (
-              <div className="col-span-2">
-                <label className="form-label">
-                  Lead ID <span className="text-red-500">*</span>
-                </label>
-                <input
-                  required
-                  className="form-input"
-                  value={form.leadId}
-                  onChange={(e) => setForm({ ...form, leadId: e.target.value })}
-                  placeholder="Enter leadId"
-                />
-              </div>
-            )}
           </div>
-
           <div>
             <label className="form-label">Note</label>
             <textarea
