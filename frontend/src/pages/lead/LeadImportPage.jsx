@@ -234,15 +234,31 @@ export default function LeadImportPage() {
     } catch (e) {
       setAlert({ type: 'error', message: e?.response?.data?.message || 'Import failed. Please check the file and try again.' })
     } finally {
-      setLoading(false)
+      setLoading(false);
     }
+  }
+
+  function updateDate(setter) {
+    return (value) => {
+      setter(value);
+
+      if (alert) {
+        setAlert(null);
+      }
+    };
   }
 
   return (
     <div className="animate-fade-in max-w-5xl">
       <div className="flex items-center gap-3 mb-6">
-        <Link to="/lead" className="text-gray-400 hover:text-gray-600">
-          <Icon name="mdi:arrow-left" className="text-xl" />
+        <Link
+          to="/lead"
+          className="text-gray-400 hover:text-gray-600 transition-colors"
+        >
+          <Icon
+            name="mdi:arrow-left"
+            className="text-xl"
+          />
         </Link>
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Import Leads</h1>
@@ -349,5 +365,5 @@ export default function LeadImportPage() {
         </AppCard>
       </div>
     </div>
-  )
+  );
 }
