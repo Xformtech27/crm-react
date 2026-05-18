@@ -5,11 +5,11 @@ import {
   Chart as ChartJS, CategoryScale, LinearScale, BarElement,
   ArcElement, Tooltip, Legend,
 } from 'chart.js'
-import { useDashboard } from '../hooks/useDashboard'
 import { useLead } from '../hooks/useLead'
+import { useOpportunity } from '../hooks/useOpportunity'
+import { useProject } from '../hooks/useProject'
 import { useTask } from '../hooks/useTask'
 import { useAdvancedCrmData } from '../hooks/useAdvancedCrmData'
-import { useAuthStore } from '../stores/auth'
 import Icon from '../components/Icon'
 
 ChartJS.register(CategoryScale, LinearScale, BarElement, ArcElement, Tooltip, Legend)
@@ -25,6 +25,49 @@ const DATE_LABELS = { today: 'Today', week: 'This Week', month: 'This Month', qu
 const STATUS_PALETTE = ['#10b981', '#3b82f6', '#f59e0b', '#94a3b8', '#8b5cf6', '#06b6d4', '#f97316']
 const OPP_PALETTE = ['#10b981', '#3b82f6', '#ef4444', '#f59e0b', '#8b5cf6']
 const SOURCE_PALETTE = ['#3b82f6', '#10b981', '#f59e0b', '#8b5cf6', '#ef4444', '#06b6d4', '#f97316']
+
+function getRangeBounds(range) {
+  const now = new Date()
+  const start = new Date(now)
+  start.setHours(0, 0, 0, 0)
+
+  if (range === 'week') {
+    const day = (start.getDay() + 6) % 7
+    start.setDate(start.getDate() - day)
+  } else if (range === 'month') {
+    start.setDate(1)
+  } else if (range === 'quarter') {
+    start.setMonth(Math.floor(start.getMonth() / 3) * 3, 1)
+  }
+
+  const end = new Date(now)
+  end.setHours(23, 59, 59, 999)
+  return { start, end }
+}
+
+function parseDate(value) {
+  if (!value) return null
+  const date = new Date(value)
+  return Number.isNaN(date.getTime()) ? null : date
+}
+
+function isInRange(value, bounds) {
+  const date = parseDate(value)
+  return !!date && date >= bounds.start && date <= bounds.end
+}
+
+function groupByCount(items, getKey) {
+  const map = new Map()
+  items.forEach((item) => {
+    const key = String(getKey(item) || 'Unknown')
+    map.set(key, (map.get(key) || 0) + 1)
+  })
+  return Array.from(map.entries()).map(([label, count]) => ({ label, count }))
+}
+
+function countByStatus(items, matcher) {
+  return items.filter((item) => matcher(String(item || '').toLowerCase())).length
+}
 
 const doughnutOptions = {
   responsive: true, maintainAspectRatio: false, cutout: '68%',
@@ -48,16 +91,18 @@ const leadBarOptions = {
 
 export default function HomePage() {
   const navigate = useNavigate()
-  const { getStats } = useDashboard()
-  const { getAllScores } = useLead()
+  const { getAll: getAllLeads, getAllScores } = useLead()
+  const { getAll: getAllOpportunities } = useOpportunity()
+  const { getAll: getAllProjects } = useProject()
   const { getAll: getAllTasks } = useTask()
   const { state: advancedCrmState, load: loadAdvancedCrm } = useAdvancedCrmData()
-  const user = useAuthStore((s) => s.user)
 
-  const [dateRange, setDateRange] = useState('month')
+  const [dateRange, setDateRange] = useState('today')
   const [activeChart, setActiveChart] = useState('status')
   const [completedTaskIds, setCompletedTaskIds] = useState(new Set())
-  const [stats, setStats] = useState(null)
+  const [leadsData, setLeadsData] = useState([])
+  const [opportunitiesData, setOpportunitiesData] = useState([])
+  const [projectsData, setProjectsData] = useState([])
   const [hotLeadsData, setHotLeadsData] = useState([])
   const [tasksData, setTasksData] = useState([])
   const [loading, setLoading] = useState(true)
@@ -67,12 +112,18 @@ export default function HomePage() {
     setLoading(true)
     setError(null)
     try {
-      const [s, hl, tasks] = await Promise.all([
-        getStats(),
+      const [hl, tasks] = await Promise.all([
         getAllScores().catch(() => []),
         getAllTasks().catch(() => []),
       ])
-      setStats(s)
+      const [leads, opportunities, projects] = await Promise.all([
+        getAllLeads().catch(() => []),
+        getAllOpportunities().catch(() => []),
+        getAllProjects().catch(() => []),
+      ])
+      setLeadsData(leads ?? [])
+      setOpportunitiesData(opportunities ?? [])
+      setProjectsData(projects ?? [])
       setHotLeadsData(hl ?? [])
       setTasksData(tasks ?? [])
       await loadAdvancedCrm()
@@ -85,30 +136,86 @@ export default function HomePage() {
 
   useEffect(() => { fetchAll() }, [fetchAll])
 
+  const rangeBounds = useMemo(() => getRangeBounds(dateRange), [dateRange])
+
+  const filteredLeads = useMemo(() =>
+    (leadsData ?? []).filter((lead) =>
+      isInRange(lead.inquiryDate || lead.leadCreatedDate, rangeBounds)
+    ),
+    [leadsData, rangeBounds]
+  )
+
+  const filteredOpportunities = useMemo(() =>
+    (opportunitiesData ?? []).filter((opp) =>
+      isInRange(opp.oppActualCloseDate || opp.oppForcastCloseDate, rangeBounds)
+    ),
+    [opportunitiesData, rangeBounds]
+  )
+
+  const filteredProjects = useMemo(() =>
+    (projectsData ?? []).filter((project) =>
+      isInRange(project.projectStartDate || project.projectCompletedDate || project.forecastCompletedDate, rangeBounds)
+    ),
+    [projectsData, rangeBounds]
+  )
+
+  const filteredTasks = useMemo(() =>
+    (tasksData ?? []).filter((task) =>
+      isInRange(task.taskDueDate || task.taskStartDate || task.taskCompletedDate, rangeBounds)
+    ),
+    [tasksData, rangeBounds]
+  )
+
+  const rangeStats = useMemo(() => {
+    const leadStatuses = filteredLeads.map((lead) => lead.leadStatus)
+    const oppStatuses = filteredOpportunities.map((opp) => opp.oppStatus)
+    return {
+      leadAll: filteredLeads.length,
+      leadNotContacted: countByStatus(leadStatuses, (s) => s.includes('notcontacted') || s.includes('not contacted')),
+      leadContacted: countByStatus(leadStatuses, (s) => s === 'contacted' || (s.includes('contacted') && !s.includes('not'))),
+      leadQualified: countByStatus(leadStatuses, (s) => s.includes('qualified')),
+      leadWorking: countByStatus(leadStatuses, (s) => s.includes('working')),
+      leadQuotationSent: countByStatus(leadStatuses, (s) => s.includes('quotation')),
+      leadNegotiation: countByStatus(leadStatuses, (s) => s.includes('negotiation')),
+      leadConverted: countByStatus(leadStatuses, (s) => s.includes('converted')),
+      opportunityWon: countByStatus(oppStatuses, (s) => s.includes('won')),
+      opportunityLost: countByStatus(oppStatuses, (s) => s.includes('lost')),
+      opportunityOpen: countByStatus(oppStatuses, (s) => s.includes('open')),
+      projectCount: filteredProjects.length,
+      leadSourceWiseCount: groupByCount(filteredLeads, (lead) => lead.leadSource),
+      opportunityStatusWiseCount: groupByCount(filteredOpportunities, (opp) => opp.oppStatus),
+    }
+  }, [filteredLeads, filteredOpportunities, filteredProjects])
+
   const winRate = useMemo(() => {
-    const won = Number(stats?.opportunityWon ?? 0)
-    const lost = Number(stats?.opportunityLost ?? 0)
+    const won = Number(rangeStats.opportunityWon ?? 0)
+    const lost = Number(rangeStats.opportunityLost ?? 0)
     const total = won + lost
     return total ? Math.round((won / total) * 100) : 0
-  }, [stats])
+  }, [rangeStats])
 
   const conversionRate = useMemo(() => {
-    const all = Number(stats?.leadAll ?? 0)
-    const converted = Number(stats?.leadConverted ?? 0)
+    const all = Number(rangeStats.leadAll ?? 0)
+    const converted = Number(rangeStats.leadConverted ?? 0)
     return all ? Math.round((converted / all) * 100) : 0
-  }, [stats])
+  }, [rangeStats])
 
   const pipelineValue = useMemo(() => {
-    const total = (advancedCrmState.dealsList ?? []).reduce((sum, d) => sum + d.value, 0)
+    const total = filteredOpportunities.reduce((sum, opp) => sum + Number(opp.oppAmount || 0), 0)
     if (total >= 10000000) return `₹${(total / 10000000).toFixed(1)}Cr`
     if (total >= 100000) return `₹${(total / 100000).toFixed(1)}L`
     return `₹${total.toLocaleString('en-IN')}`
-  }, [advancedCrmState.dealsList])
+  }, [filteredOpportunities])
 
-  const topHotLeads = useMemo(() => (hotLeadsData ?? []).slice(0, 5), [hotLeadsData])
+  const topHotLeads = useMemo(() => {
+    const leadIds = new Set(filteredLeads.map((lead) => Number(lead.leadId)))
+    return (hotLeadsData ?? [])
+      .filter((score) => leadIds.has(Number(score.leadId)))
+      .slice(0, 5)
+  }, [hotLeadsData, filteredLeads])
 
   const todaysTasks = useMemo(() =>
-    (tasksData ?? []).slice(0, 6).map((t) => ({
+    filteredTasks.slice(0, 6).map((t) => ({
       id: t.taskId,
       title: t.taskName,
       owner: t.taskAssign || (t.taskAssignedTo ? `User ${t.taskAssignedTo}` : 'Unassigned'),
@@ -117,7 +224,17 @@ export default function HomePage() {
       dueDate: t.taskDueDate || t.taskStartDate,
       pct: t.taskPercentageCompleted ?? 0,
     })),
-    [tasksData, completedTaskIds]
+    [filteredTasks, completedTaskIds]
+  )
+
+  const completedVisibleTasks = useMemo(
+    () => todaysTasks.filter((task) => task.completed).length,
+    [todaysTasks]
+  )
+
+  const filteredActivityFeed = useMemo(() =>
+    (advancedCrmState.activityFeed ?? []).filter((item) => isInRange(item.time, rangeBounds)),
+    [advancedCrmState.activityFeed, rangeBounds]
   )
 
   function toggleTask(id) {
@@ -130,17 +247,16 @@ export default function HomePage() {
   }
 
   const leadStatusItems = useMemo(() => {
-    if (!stats) return []
     return [
-      { label: 'Qualified', value: stats.leadQualified ?? 0 },
-      { label: 'Working', value: stats.leadWorking ?? 0 },
-      { label: 'Contacted', value: stats.leadContacted ?? 0 },
-      { label: 'Not Contacted', value: stats.leadNotContacted ?? 0 },
-      { label: 'Converted', value: stats.leadConverted ?? 0 },
-      { label: 'Quotation Sent', value: stats.leadQuotationSent ?? 0 },
-      { label: 'Negotiation', value: stats.leadNegotiation ?? 0 },
+      { label: 'Qualified', value: rangeStats.leadQualified ?? 0 },
+      { label: 'Working', value: rangeStats.leadWorking ?? 0 },
+      { label: 'Contacted', value: rangeStats.leadContacted ?? 0 },
+      { label: 'Not Contacted', value: rangeStats.leadNotContacted ?? 0 },
+      { label: 'Converted', value: rangeStats.leadConverted ?? 0 },
+      { label: 'Quotation Sent', value: rangeStats.leadQuotationSent ?? 0 },
+      { label: 'Negotiation', value: rangeStats.leadNegotiation ?? 0 },
     ].filter((i) => i.value > 0)
-  }, [stats])
+  }, [rangeStats])
 
   const leadBarData = useMemo(() => ({
     labels: leadStatusItems.map((i) => i.label),
@@ -152,11 +268,11 @@ export default function HomePage() {
   }), [leadStatusItems])
 
   const oppStatusItems = useMemo(() =>
-    (stats?.opportunityStatusWiseCount ?? []).map((m) => ({
+    (rangeStats.opportunityStatusWiseCount ?? []).map((m) => ({
       label: String(m.label ?? m.status ?? m.oppStatus ?? m.name ?? 'Unknown'),
       value: Number(m.count ?? m.total ?? 0),
     })).filter((i) => i.value > 0),
-    [stats]
+    [rangeStats]
   )
 
   const oppDoughnutData = useMemo(() => ({
@@ -169,11 +285,11 @@ export default function HomePage() {
   }), [oppStatusItems])
 
   const leadSourceItems = useMemo(() =>
-    (stats?.leadSourceWiseCount ?? []).map((m) => ({
+    (rangeStats.leadSourceWiseCount ?? []).map((m) => ({
       label: String(m.label ?? m.source ?? m.leadSource ?? m.name ?? 'Unknown'),
       value: Number(m.count ?? m.total ?? 0),
     })).filter((i) => i.value > 0),
-    [stats]
+    [rangeStats]
   )
 
   const leadSourceDoughnutData = useMemo(() => ({
@@ -186,16 +302,15 @@ export default function HomePage() {
   }), [leadSourceItems])
 
   const funnelSteps = useMemo(() => {
-    if (!stats) return []
-    const total = stats.leadAll || 1
+    const total = rangeStats.leadAll || 1
     return [
-      { label: 'Total Leads', count: stats.leadAll ?? 0, pct: 100, color: '#3b82f6' },
-      { label: 'Contacted', count: stats.leadContacted ?? 0, pct: Math.round(((stats.leadContacted ?? 0) / total) * 100), color: '#06b6d4' },
-      { label: 'Qualified', count: stats.leadQualified ?? 0, pct: Math.round(((stats.leadQualified ?? 0) / total) * 100), color: '#10b981' },
-      { label: 'Negotiation', count: stats.leadNegotiation ?? 0, pct: Math.round(((stats.leadNegotiation ?? 0) / total) * 100), color: '#f59e0b' },
-      { label: 'Converted', count: stats.leadConverted ?? 0, pct: Math.round(((stats.leadConverted ?? 0) / total) * 100), color: '#8b5cf6' },
+      { label: 'Total Leads', count: rangeStats.leadAll ?? 0, pct: 100, color: '#3b82f6' },
+      { label: 'Contacted', count: rangeStats.leadContacted ?? 0, pct: Math.round(((rangeStats.leadContacted ?? 0) / total) * 100), color: '#06b6d4' },
+      { label: 'Qualified', count: rangeStats.leadQualified ?? 0, pct: Math.round(((rangeStats.leadQualified ?? 0) / total) * 100), color: '#10b981' },
+      { label: 'Negotiation', count: rangeStats.leadNegotiation ?? 0, pct: Math.round(((rangeStats.leadNegotiation ?? 0) / total) * 100), color: '#f59e0b' },
+      { label: 'Converted', count: rangeStats.leadConverted ?? 0, pct: Math.round(((rangeStats.leadConverted ?? 0) / total) * 100), color: '#8b5cf6' },
     ]
-  }, [stats])
+  }, [rangeStats])
 
   const chartTabs = [
     { key: 'status', label: 'Lead Status' },
@@ -274,7 +389,7 @@ export default function HomePage() {
                   <Icon name="mdi:account-multiple-outline" className="w-4 h-4 text-blue-500" />
                 </div>
               </div>
-              <p className="text-2xl font-bold text-gray-900">{stats?.leadAll ?? 0}</p>
+              <p className="text-2xl font-bold text-gray-900">{rangeStats.leadAll ?? 0}</p>
               <p className="text-xs text-blue-500 mt-1.5 flex items-center gap-1 font-medium">
                 <Icon name="mdi:arrow-right" className="w-3 h-3" /> View all leads
               </p>
@@ -287,7 +402,7 @@ export default function HomePage() {
                   <Icon name="mdi:handshake-outline" className="w-4 h-4 text-violet-500" />
                 </div>
               </div>
-              <p className="text-2xl font-bold text-gray-900">{stats?.opportunityOpen ?? 0}</p>
+              <p className="text-2xl font-bold text-gray-900">{rangeStats.opportunityOpen ?? 0}</p>
               <p className="text-xs text-violet-500 mt-1.5 flex items-center gap-1 font-medium">
                 <Icon name="mdi:chart-timeline-variant" className="w-3 h-3" /> Pipeline: {pipelineValue}
               </p>
@@ -295,14 +410,14 @@ export default function HomePage() {
 
             <Link to="/task" className="block bg-white rounded-xl border border-gray-100 shadow-sm p-5 border-l-4 border-l-amber-500 hover:shadow-md transition-shadow group">
               <div className="flex items-center justify-between mb-3">
-                <span className="text-xs font-semibold uppercase tracking-wide text-gray-400">Tasks Today</span>
+                <span className="text-xs font-semibold uppercase tracking-wide text-gray-400">Tasks {DATE_LABELS[dateRange]}</span>
                 <div className="w-8 h-8 rounded-lg bg-amber-50 group-hover:bg-amber-100 flex items-center justify-center transition-colors">
                   <Icon name="mdi:clipboard-check-outline" className="w-4 h-4 text-amber-500" />
                 </div>
               </div>
               <p className="text-2xl font-bold text-gray-900">{todaysTasks.length}</p>
               <p className="text-xs text-amber-500 mt-1.5 flex items-center gap-1 font-medium">
-                <Icon name="mdi:check-circle-outline" className="w-3 h-3" /> {completedTaskIds.size} completed
+                <Icon name="mdi:check-circle-outline" className="w-3 h-3" /> {completedVisibleTasks} completed
               </p>
             </Link>
 
@@ -323,9 +438,9 @@ export default function HomePage() {
           {/* KPI Row 2 */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
             {[
-              { to: '/opportunity', icon: 'mdi:trophy', bg: 'bg-emerald-50 group-hover:bg-emerald-100', iconColor: 'text-emerald-600', value: stats?.opportunityWon ?? 0, label: 'Opp. Won' },
-              { to: '/lead', icon: 'mdi:swap-horizontal', bg: 'bg-purple-50 group-hover:bg-purple-100', iconColor: 'text-purple-600', value: stats?.leadConverted ?? 0, label: 'Converted' },
-              { to: '/project', icon: 'mdi:folder-open-outline', bg: 'bg-blue-50 group-hover:bg-blue-100', iconColor: 'text-blue-600', value: stats?.projectCount ?? 0, label: 'Projects' },
+              { to: '/opportunity', icon: 'mdi:trophy', bg: 'bg-emerald-50 group-hover:bg-emerald-100', iconColor: 'text-emerald-600', value: rangeStats.opportunityWon ?? 0, label: 'Opp. Won' },
+              { to: '/lead', icon: 'mdi:swap-horizontal', bg: 'bg-purple-50 group-hover:bg-purple-100', iconColor: 'text-purple-600', value: rangeStats.leadConverted ?? 0, label: 'Converted' },
+              { to: '/project', icon: 'mdi:folder-open-outline', bg: 'bg-blue-50 group-hover:bg-blue-100', iconColor: 'text-blue-600', value: rangeStats.projectCount ?? 0, label: 'Projects' },
               { to: '/lead', icon: 'mdi:rotate-right', bg: 'bg-cyan-50 group-hover:bg-cyan-100', iconColor: 'text-cyan-600', value: `${conversionRate}%`, label: 'Conversion' },
             ].map((kpi) => (
               <Link key={kpi.label} to={kpi.to} className="block bg-white rounded-xl border border-gray-100 shadow-sm p-4 hover:shadow-md transition-shadow group">
@@ -412,12 +527,12 @@ export default function HomePage() {
                 <div className="flex items-center justify-between px-5 pt-4 pb-3 border-b border-gray-50">
                   <div>
                     <p className="text-sm font-semibold text-gray-800">Recent Activity</p>
-                    <p className="text-xs text-gray-400 mt-0.5">Latest CRM actions across your team</p>
+                    <p className="text-xs text-gray-400 mt-0.5">{DATE_LABELS[dateRange]} CRM actions across your team</p>
                   </div>
                   <Link to="/activities" className="text-xs text-blue-600 hover:text-blue-700 font-semibold">View all →</Link>
                 </div>
                 <div className="divide-y divide-gray-50 max-h-80 overflow-y-auto">
-                  {(advancedCrmState.activityFeed ?? []).slice(0, 10).map((item) => (
+                  {filteredActivityFeed.slice(0, 10).map((item) => (
                     <div key={item.id} className="flex items-start gap-3 px-5 py-3 hover:bg-gray-50/80 transition-colors cursor-default">
                       <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 mt-0.5 ${
                         item.type === 'Call' ? 'bg-indigo-100' : item.type === 'Email' ? 'bg-blue-100' : item.type === 'Meeting' ? 'bg-orange-100' : 'bg-purple-100'
@@ -434,7 +549,7 @@ export default function HomePage() {
                       <span className="text-[11px] text-gray-400 whitespace-nowrap shrink-0 mt-0.5">{item.time}</span>
                     </div>
                   ))}
-                  {!(advancedCrmState.activityFeed ?? []).length && (
+                  {!filteredActivityFeed.length && (
                     <div className="px-5 py-8 text-center text-sm text-gray-400">No recent activity.</div>
                   )}
                 </div>
@@ -510,15 +625,15 @@ export default function HomePage() {
               <div className="bg-white rounded-xl border border-gray-100 shadow-sm">
                 <div className="flex items-center justify-between px-5 pt-4 pb-3 border-b border-gray-50">
                   <div>
-                    <p className="text-sm font-semibold text-gray-800">Tasks</p>
-                    <p className="text-xs text-gray-400">{completedTaskIds.size} / {todaysTasks.length} done</p>
+                    <p className="text-sm font-semibold text-gray-800">Tasks - {DATE_LABELS[dateRange]}</p>
+                    <p className="text-xs text-gray-400">{completedVisibleTasks} / {todaysTasks.length} done</p>
                   </div>
                   <Link to="/task" className="text-xs text-blue-600 hover:text-blue-700 font-semibold">View all →</Link>
                 </div>
                 <div className="h-1 bg-gray-100 mx-5 mt-3 rounded-full overflow-hidden">
                   <div
                     className="h-full bg-emerald-500 rounded-full transition-all duration-500"
-                    style={{ width: todaysTasks.length ? `${Math.round((completedTaskIds.size / todaysTasks.length) * 100)}%` : '0%' }}
+                    style={{ width: todaysTasks.length ? `${Math.round((completedVisibleTasks / todaysTasks.length) * 100)}%` : '0%' }}
                   />
                 </div>
                 <div className="divide-y divide-gray-50 mt-1">
