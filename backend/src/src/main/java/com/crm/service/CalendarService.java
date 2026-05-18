@@ -20,6 +20,12 @@ public class CalendarService {
     private final TaskRepository taskRepository;
     private final LeadReminderRepository leadReminderRepository;
 
+    public Map<String, Object> getAllCalendarEvents() {
+        List<Task> tasks = taskRepository.findAll();
+        List<LeadReminder> reminders = leadReminderRepository.findAll();
+        return buildCalendarResponse(tasks, reminders);
+    }
+
     public Map<String, Object> getCalendarEvents(String date) {
         LocalDate localDate;
         try {
@@ -30,6 +36,10 @@ public class CalendarService {
         List<Task> tasks = taskRepository.findByTaskDueDate(localDate);
         List<LeadReminder> reminders = leadReminderRepository.findByReminderDateOn(localDate);
 
+        return buildCalendarResponse(tasks, reminders);
+    }
+
+    private Map<String, Object> buildCalendarResponse(List<Task> tasks, List<LeadReminder> reminders) {
         List<Map<String, Object>> events = new ArrayList<>();
 
         tasks.forEach(t -> {
@@ -40,6 +50,8 @@ public class CalendarService {
             event.put("date", t.getTaskDueDate() != null ? t.getTaskDueDate().toString() : null);
             event.put("priority", t.getTaskPriority());
             event.put("status", t.getTaskPercentageCompleted());
+            event.put("note", t.getTaskDescription());
+            event.put("owner", t.getTaskAssign());
             events.add(event);
         });
 

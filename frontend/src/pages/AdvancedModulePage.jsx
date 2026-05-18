@@ -503,7 +503,6 @@ function AnalyticsDashboard() {
 
 function CalendarMonthView() {
   const { load } = useAdvancedCrmData();
-  const activityApi = useActivity();
   const calendarApi = useCalendar();
   const taskApi = useTask();
   const navigate = useNavigate();
@@ -522,14 +521,34 @@ function CalendarMonthView() {
 
   const fetchEvents = async () => {
     try {
-      const data = await calendarApi.getAllEvents();
-      const rawEvents = data.events || [];
+      const [calendarData, savedTasks] = await Promise.all([
+        calendarApi.getAllEvents().catch(() => ({ events: [] })),
+        taskApi.getAll().catch(() => []),
+      ]);
+      const taskEvents = (Array.isArray(savedTasks) ? savedTasks : []).map((task) => ({
+        type: "task",
+        id: task.taskId,
+        title: task.taskName,
+        date: task.taskDueDate || task.taskStartDate || task.taskCompletedDate,
+        priority: task.taskPriority,
+        status: task.taskPercentageCompleted,
+        note: task.taskDescription,
+        owner: task.taskAssign || task.taskAssignedTo,
+      }));
+      const reminderEvents = (calendarData.events || []).filter((event) => event.type !== "task");
+      const rawEvents = [...taskEvents, ...reminderEvents];
 
       const mappedEvents = rawEvents.map((e) => {
         let type;
         if (e.type === "task") {
           const priority = String(e.priority || "").toLowerCase();
-          type = priority === "meeting" ? "Meeting" : "Task";
+          if (priority === "meeting") {
+            type = "Meeting";
+          } else if (priority === "reminder") {
+            type = "Reminder";
+          } else {
+            type = "Task";
+          }
         } else {
           type = "Reminder";
         }
@@ -604,56 +623,40 @@ function CalendarMonthView() {
     });
   };
 
+  const getCalendarDate = () => (form.time ? form.time.slice(0, 10) : "");
+  const getCalendarPriority = () => {
+    if (form.type === "Meeting") return "meeting";
+    if (form.type === "Reminder") return "reminder";
+    return "Medium";
+  };
+
   const handleSave = async (e) => {
     e.preventDefault();
     setSaving(true);
     try {
       const isoTime = form.time ? new Date(form.time).toISOString() : "";
+      const calendarDate = getCalendarDate();
 
-      if (form.type === "Task") {
-        const taskPayload = {
-          taskName: form.title,
-          taskDueDate: isoTime,
-          taskStartDate: isoTime,
-          taskDescription: form.note,
-          taskPriority: "Medium",
-          taskStatus: "To Do",
-        };
-        const createdTask = await taskApi.create(taskPayload);
-        setEvents((prev) => [
-          ...prev,
-          {
-            id: `task-${createdTask?.taskId || Date.now()}`,
-            title: form.title,
-            type: "Task",
-            time: isoTime,
-            note: form.note,
-            owner: createdTask?.taskAssign || createdTask?.taskAssignedTo,
-          },
-        ]);
-      } else {
-        const activityPayload = {
+      const taskPayload = {
+        taskName: form.title,
+        taskDueDate: calendarDate,
+        taskStartDate: calendarDate,
+        taskDescription: form.note,
+        taskPriority: getCalendarPriority(),
+        taskPercentageCompleted: 0,
+      };
+      const createdTask = await taskApi.create(taskPayload);
+      setEvents((prev) => [
+        ...prev,
+        {
+          id: `task-${createdTask?.taskId || Date.now()}`,
           title: form.title,
           type: form.type,
-          subject: form.subject,
-          owner: form.owner,
           time: isoTime,
           note: form.note,
-        };
-        const createdActivity = await activityApi.create(activityPayload);
-        setEvents((prev) => [
-          ...prev,
-          {
-            id: createdActivity?.id || Date.now(),
-            title: form.title,
-            type: form.type,
-            time: isoTime,
-            note: form.note,
-            owner: form.owner,
-            subject: form.subject,
-          },
-        ]);
-      }
+          owner: createdTask?.taskAssign || createdTask?.taskAssignedTo,
+        },
+      ]);
       setShowModal(false);
     } finally {
       setSaving(false);

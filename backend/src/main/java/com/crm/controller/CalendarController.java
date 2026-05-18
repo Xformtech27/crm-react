@@ -17,6 +17,12 @@ public class CalendarController {
 
     private final CalendarService calendarService;
 
+    @GetMapping("/all")
+    public ResponseEntity<ApiResponse<Map<String, Object>>> getAllEvents() {
+        return ResponseEntity.ok(ApiResponse.success("Calendar events fetched",
+                calendarService.getAllCalendarEvents()));
+    }
+
     @GetMapping
     public ResponseEntity<ApiResponse<Map<String, Object>>> getEvents(
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date) {
