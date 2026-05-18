@@ -3194,6 +3194,43 @@ const STATUS_TABS = [
   "Won",
   "Lost",
 ];
+const LEAD_EXPORT_FIELDS = [
+  { header: "Lead ID", value: (lead) => lead.leadId },
+  { header: "First Name", value: (lead) => lead.leadFirstName },
+  { header: "Last Name", value: (lead) => lead.leadLastName },
+  {
+    header: "Full Name",
+    value: (lead) =>
+      `${lead.leadFirstName ?? ""} ${lead.leadLastName ?? ""}`.trim(),
+  },
+  { header: "Title", value: (lead) => lead.leadTitle },
+  { header: "Designation", value: (lead) => lead.designation },
+  { header: "Mobile", value: (lead) => lead.leadMobileNo },
+  { header: "Phone", value: (lead) => lead.leadPhoneNo },
+  { header: "Email", value: (lead) => lead.leadEmail },
+  { header: "Organization", value: (lead) => lead.leadOrganisationName },
+  { header: "Website", value: (lead) => lead.leadWebsite },
+  { header: "Industry", value: (lead) => lead.leadIndustry },
+  { header: "Employees", value: (lead) => lead.noOfEmployee },
+  { header: "Status", value: (lead) => lead.leadStatus },
+  { header: "Source", value: (lead) => lead.leadSource },
+  { header: "Type", value: (lead) => lead.leadType },
+  { header: "Reason / Notes", value: (lead) => lead.leadReason },
+  { header: "Address", value: (lead) => lead.leadAddress },
+  { header: "City", value: (lead) => lead.leadCity },
+  { header: "State", value: (lead) => lead.leadState },
+  { header: "Country", value: (lead) => lead.leadCountry },
+  { header: "Inquiry Date", value: (lead) => formatDate(lead.inquiryDate) },
+  { header: "Created Date", value: (lead) => formatDate(lead.leadCreatedDate) },
+  { header: "Assigned User ID", value: (lead) => lead.userIdFk },
+  { header: "Unique Query ID", value: (lead) => lead.uniqueQueryId },
+  { header: "Document 1", value: (lead) => lead.uploadDocument },
+  { header: "Document 2", value: (lead) => lead.uploadDocument1 },
+  { header: "Document 3", value: (lead) => lead.uploadDocument2 },
+  { header: "Document 4", value: (lead) => lead.uploadDocument3 },
+  { header: "Grade", value: (_lead, score) => score?.grade },
+  { header: "Score", value: (_lead, score) => score?.score },
+];
 const AVATAR_COLORS = [
   "bg-blue-100 text-blue-700",
   "bg-violet-100 text-violet-700",
@@ -3218,6 +3255,12 @@ function timeAgo(dateStr) {
   const days = Math.floor(hrs / 24);
   if (days < 30) return `${days}d ago`;
   return `${Math.floor(days / 30)}mo ago`;
+}
+
+function csvCell(value) {
+  if (value == null || value === "â€”") return "";
+  const text = String(value).replace(/\r?\n/g, " ").trim();
+  return /[",\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
 }
 
 export default function LeadListPage() {
@@ -3450,28 +3493,15 @@ export default function LeadListPage() {
 
   async function bulkExport() {
     const selected = allLeads.filter((l) => selectedIds.has(l.leadId));
-    const headers = [
-      "First Name",
-      "Last Name",
-      "Mobile",
-      "Email",
-      "Organization",
-      "Status",
-      "Source",
-      "Date",
-    ];
-    const rows = selected.map((l) => [
-      l.leadFirstName ?? "",
-      l.leadLastName ?? "",
-      l.leadMobileNo ?? "",
-      l.leadEmail ?? "",
-      l.leadOrganisationName ?? "",
-      l.leadStatus ?? "",
-      l.leadSource ?? "",
-      formatDate(l.leadCreatedDate),
-    ]);
-    const csv = [headers, ...rows].map((r) => r.join(",")).join("\n");
-    const blob = new Blob([csv], { type: "text/csv" });
+    const headers = LEAD_EXPORT_FIELDS.map((field) => field.header);
+    const rows = selected.map((lead) => {
+      const score = scoresMap[lead.leadId];
+      return LEAD_EXPORT_FIELDS.map((field) => field.value(lead, score));
+    });
+    const csv = [headers, ...rows]
+      .map((row) => row.map(csvCell).join(","))
+      .join("\n");
+    const blob = new Blob([`\uFEFF${csv}`], { type: "text/csv;charset=utf-8" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
@@ -3700,17 +3730,31 @@ export default function LeadListPage() {
   async function handleSave(formData) {
     setModalSaving(true);
     try {
+      // Backend expects multipart/form-data with a "lead" part (JSON) and optional files parts.
+      // LeadForm sends only JSON fields; no file upload exists on this UI, so send an empty files object.
+      const safeFiles = {};
+
+      // FIX: avoid passing the synthetic React event object to API.
+      // LeadForm calls onSubmit with a plain object (handleSubmit in LeadForm.jsx).
+      const payload =
+        formData && typeof formData === "object" && !Array.isArray(formData)
+          ? formData
+          : {};
+
       if (editingLead?.leadId) {
-        await update(editingLead.leadId, formData, {});
+        await update(editingLead.leadId, payload, safeFiles);
         showToast("success", "Lead updated.");
       } else {
-        await create(formData, {});
+        await create(payload, safeFiles);
         showToast("success", "Lead created.");
       }
       setShowModal(false);
       await loadAll();
-    } catch {
-      showToast("error", "Failed to save lead.");
+    } catch (err) {
+      // Surface more details if available.
+      const msg =
+        err?.response?.data?.message || err?.message || "Failed to save lead.";
+      showToast("error", msg);
     } finally {
       setModalSaving(false);
     }
@@ -3781,7 +3825,7 @@ export default function LeadListPage() {
       {/* Filter Bar */}
       <div className="flex flex-col gap-3 mb-3">
         <div className="flex justify-between">
-          <div className="flex flex-wrap items-center gap-2">
+          <div className=" flex flex-wrap items-center gap-2">
             <div className="flex items-center gap-1 flex-wrap">
               {STATUS_TABS.map((s) => (
                 <button
@@ -3813,7 +3857,7 @@ export default function LeadListPage() {
           </div>
 
           <div className="flex items-center gap-2">
-            <div className="relative w-72">
+            <div className="relative w-72 mr-auto">
               <Icon
                 name="mdi:magnify"
                 className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none"
@@ -3827,13 +3871,13 @@ export default function LeadListPage() {
               />
             </div>
 
-            <button
-              onClick={() => setShowImportModal(true)}
+            <Link
+              to="/lead/import"
               className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg border border-gray-200 bg-white text-sm font-medium text-gray-700 hover:bg-gray-50 hover:border-gray-300 transition-colors shadow-sm"
             >
               <Icon name="mdi:cloud-upload-outline" className="w-4 h-4" />
               Import
-            </button>
+            </Link>
 
             <button
               onClick={openCreate}
@@ -3844,7 +3888,6 @@ export default function LeadListPage() {
             </button>
           </div>
         </div>
-
         <div className="flex flex-wrap items-center gap-2">
           <div className="flex items-center gap-1">
             <input
@@ -4581,6 +4624,355 @@ export default function LeadListPage() {
             >
               <Icon name="mdi:close" className="w-4 h-4" />
             </button>
+          </div>,
+          document.body,
+        )}
+
+      {/* Right slide-over panel */}
+      {showPanel &&
+        panelLead &&
+        createPortal(
+          <div className="fixed inset-0 z-50 flex justify-end">
+            <div
+              className="absolute inset-0 bg-black/30 backdrop-blur-sm"
+              onClick={() => setShowPanel(false)}
+            />
+            <div className="relative w-full max-w-[480px] h-full bg-white shadow-2xl flex flex-col overflow-hidden">
+              <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 shrink-0">
+                <div className="flex items-center gap-3">
+                  <div
+                    className={`w-10 h-10 rounded-xl flex items-center justify-center text-sm font-bold ${avatarColor(panelLead.leadFirstName)}`}
+                  >
+                    {(panelLead.leadFirstName?.[0] ?? "?").toUpperCase()}
+                  </div>
+                  <div>
+                    <p className="text-base font-semibold text-gray-900 leading-snug">
+                      {panelLead.leadFirstName} {panelLead.leadLastName}
+                    </p>
+                    {panelLead.leadOrganisationName && (
+                      <p className="text-xs text-gray-400">
+                        {panelLead.leadOrganisationName}
+                      </p>
+                    )}
+                  </div>
+                </div>
+                <button
+                  onClick={() => setShowPanel(false)}
+                  className="p-1.5 rounded-lg text-gray-400 hover:bg-gray-100 hover:text-gray-600 transition-colors"
+                >
+                  <Icon name="mdi:close" className="w-5 h-5" />
+                </button>
+              </div>
+
+              <div className="flex-1 overflow-y-auto p-5 space-y-5">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span
+                    className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold ${STATUS_BG[panelLead.leadStatus] ?? "bg-gray-100 text-gray-600"}`}
+                  >
+                    {panelLead.leadStatus}
+                  </span>
+                  {panelLead.leadSource && (
+                    <span
+                      className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${SOURCE_BG[panelLead.leadSource] ?? "bg-gray-100 text-gray-500"}`}
+                    >
+                      {panelLead.leadSource}
+                    </span>
+                  )}
+                  {scoresMap[panelLead.leadId] && (
+                    <span
+                      className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold border ${GRADE_BG[scoresMap[panelLead.leadId].grade]}`}
+                    >
+                      Grade {scoresMap[panelLead.leadId].grade} ·{" "}
+                      {scoresMap[panelLead.leadId].score}/100
+                    </span>
+                  )}
+                </div>
+
+                <div className="bg-gray-50 rounded-xl p-4 space-y-3">
+                  <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide">
+                    Contact Info
+                  </p>
+                  {panelLead.leadMobileNo && (
+                    <div className="flex items-center gap-2.5">
+                      <Icon
+                        name="mdi:phone-outline"
+                        className="w-4 h-4 text-gray-400 shrink-0"
+                      />
+                      <a
+                        href={`tel:${panelLead.leadMobileNo}`}
+                        className="text-sm text-gray-700 hover:text-blue-600 transition-colors"
+                      >
+                        {panelLead.leadMobileNo}
+                      </a>
+                    </div>
+                  )}
+                  {panelLead.leadEmail && (
+                    <div className="flex items-center gap-2.5">
+                      <Icon
+                        name="mdi:email-outline"
+                        className="w-4 h-4 text-gray-400 shrink-0"
+                      />
+                      <a
+                        href={`mailto:${panelLead.leadEmail}`}
+                        className="text-sm text-gray-700 hover:text-blue-600 transition-colors truncate"
+                      >
+                        {panelLead.leadEmail}
+                      </a>
+                    </div>
+                  )}
+                  {panelLead.leadWebsite && (
+                    <div className="flex items-center gap-2.5">
+                      <Icon
+                        name="mdi:web"
+                        className="w-4 h-4 text-gray-400 shrink-0"
+                      />
+                      <a
+                        href={panelLead.leadWebsite}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-sm text-blue-600 hover:underline truncate"
+                      >
+                        {panelLead.leadWebsite}
+                      </a>
+                    </div>
+                  )}
+                  {(panelLead.leadCity ||
+                    panelLead.leadState ||
+                    panelLead.leadCountry) && (
+                    <div className="flex items-center gap-2.5">
+                      <Icon
+                        name="mdi:map-marker-outline"
+                        className="w-4 h-4 text-gray-400 shrink-0"
+                      />
+                      <span className="text-sm text-gray-700">
+                        {[
+                          panelLead.leadCity,
+                          panelLead.leadState,
+                          panelLead.leadCountry,
+                        ]
+                          .filter(Boolean)
+                          .join(", ")}
+                      </span>
+                    </div>
+                  )}
+                </div>
+
+                {(panelLead.leadOrganisationName ||
+                  panelLead.leadIndustry ||
+                  panelLead.noOfEmployee) && (
+                  <div className="bg-gray-50 rounded-xl p-4 space-y-3">
+                    <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide">
+                      Company
+                    </p>
+                    {panelLead.leadOrganisationName && (
+                      <div className="flex items-center gap-2.5">
+                        <Icon
+                          name="mdi:office-building-outline"
+                          className="w-4 h-4 text-gray-400 shrink-0"
+                        />
+                        <span className="text-sm text-gray-700">
+                          {panelLead.leadOrganisationName}
+                        </span>
+                      </div>
+                    )}
+                    {panelLead.leadIndustry && (
+                      <div className="flex items-center gap-2.5">
+                        <Icon
+                          name="mdi:domain"
+                          className="w-4 h-4 text-gray-400 shrink-0"
+                        />
+                        <span className="text-sm text-gray-700">
+                          {panelLead.leadIndustry}
+                        </span>
+                      </div>
+                    )}
+                    {panelLead.noOfEmployee && (
+                      <div className="flex items-center gap-2.5">
+                        <Icon
+                          name="mdi:account-group-outline"
+                          className="w-4 h-4 text-gray-400 shrink-0"
+                        />
+                        <span className="text-sm text-gray-700">
+                          {panelLead.noOfEmployee} employees
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="bg-gray-50 rounded-xl p-3">
+                    <p className="text-xs text-gray-400 mb-1">Created</p>
+                    <p className="text-sm font-medium text-gray-700">
+                      {formatDate(panelLead.leadCreatedDate)}
+                    </p>
+                  </div>
+                  {panelLead.inquiryDate && (
+                    <div className="bg-gray-50 rounded-xl p-3">
+                      <p className="text-xs text-gray-400 mb-1">Inquiry Date</p>
+                      <p className="text-sm font-medium text-gray-700">
+                        {formatDate(panelLead.inquiryDate)}
+                      </p>
+                    </div>
+                  )}
+                </div>
+
+                {scoresMap[panelLead.leadId]?.topFactors?.length > 0 && (
+                  <div className="bg-blue-50/60 rounded-xl p-4">
+                    <p className="text-xs font-semibold text-blue-600 uppercase tracking-wide mb-3 flex items-center gap-1.5">
+                      <Icon name="mdi:brain" className="w-4 h-4" />
+                      AI Score Factors
+                    </p>
+                    <div className="space-y-1.5">
+                      {scoresMap[panelLead.leadId].topFactors.map((factor) => (
+                        <div
+                          key={factor}
+                          className="flex items-center gap-2 text-xs text-gray-600"
+                        >
+                          <Icon
+                            name="mdi:check-circle"
+                            className="w-3.5 h-3.5 text-blue-500 shrink-0"
+                          />
+                          {factor}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {panelLead.leadReason && (
+                  <div className="bg-gray-50 rounded-xl p-4">
+                    <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">
+                      Notes
+                    </p>
+                    <p className="text-sm text-gray-700 leading-relaxed">
+                      {panelLead.leadReason}
+                    </p>
+                  </div>
+                )}
+              </div>
+
+              <div className="px-5 py-4 border-t border-gray-100 flex items-center gap-2 bg-gray-50/50 shrink-0">
+                <Link
+                  to={`/lead/${panelLead.leadId}`}
+                  className="flex-1 inline-flex items-center justify-center gap-1.5 py-2 rounded-lg border border-gray-200 bg-white text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
+                >
+                  <Icon name="mdi:open-in-new" className="w-4 h-4" />
+                  Full Detail
+                </Link>
+                <button
+                  onClick={() => openEdit(panelLead)}
+                  className="flex-1 inline-flex items-center justify-center gap-1.5 py-2 rounded-lg bg-blue-600 text-sm font-medium text-white hover:bg-blue-700 transition-colors"
+                >
+                  <Icon name="mdi:pencil-outline" className="w-4 h-4" />
+                  Edit Lead
+                </button>
+                <button
+                  onClick={() => {
+                    setDeleteId(panelLead.leadId);
+                    setShowPanel(false);
+                  }}
+                  className="p-2 rounded-lg border border-gray-200 text-gray-400 hover:bg-red-50 hover:text-red-600 hover:border-red-200 transition-colors"
+                  title="Delete"
+                >
+                  <Icon name="mdi:trash-can-outline" className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+          </div>,
+          document.body,
+        )}
+
+      {/* Create / Edit Slide-over */}
+      {showModal &&
+        createPortal(
+          <div className="fixed inset-0 z-50 flex justify-end">
+            <div
+              className="absolute inset-0 bg-black/30 backdrop-blur-[2px]"
+              onClick={() => setShowModal(false)}
+            />
+            <div className="relative w-full max-w-[640px] h-full bg-white shadow-2xl flex flex-col">
+              <div className="flex items-center gap-3 px-6 py-5 border-b border-gray-100 bg-gradient-to-r from-blue-600 to-indigo-600 shrink-0">
+                <div className="w-9 h-9 rounded-xl bg-white/20 flex items-center justify-center shrink-0">
+                  <Icon
+                    name={
+                      editingLead
+                        ? "mdi:pencil-outline"
+                        : "mdi:account-plus-outline"
+                    }
+                    className="w-5 h-5 text-white"
+                  />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <h2 className="text-base font-bold text-white leading-tight">
+                    {editingLead ? "Edit Lead" : "New Lead"}
+                  </h2>
+                  <p className="text-xs text-blue-100 mt-0.5">
+                    {editingLead
+                      ? `Updating: ${editingLead.leadFirstName} ${editingLead.leadLastName ?? ""}`
+                      : "Fill in the details to create a new lead"}
+                  </p>
+                </div>
+                <button
+                  onClick={() => setShowModal(false)}
+                  className="w-8 h-8 rounded-lg flex items-center justify-center text-white/70 hover:bg-white/20 hover:text-white transition-colors"
+                >
+                  <Icon name="mdi:close" className="w-5 h-5" />
+                </button>
+              </div>
+              <div className="flex-1 overflow-y-auto px-6 py-6">
+                <LeadForm
+                  key={editingLead?.leadId ?? "create"}
+                  ref={leadFormRef}
+                  initial={editingLead}
+                  loading={modalSaving}
+                  onSubmit={handleSave}
+                />
+              </div>
+              <div className="flex items-center justify-between gap-3 px-6 py-4 border-t border-gray-100 bg-gray-50/70 shrink-0">
+                <div className="text-xs text-gray-400">
+                  <span className="text-red-500">*</span> Required fields
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => setShowModal(false)}
+                    className="px-5 py-2.5 rounded-lg border border-gray-200 text-sm font-medium text-gray-600 hover:bg-gray-100 transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={() => {
+                      // Submit the form by triggering the DOM submit event.
+                      // LeadForm itself is not forwarding refs, so calling ref.submit() won't work.
+                      document.getElementById("lead-form")?.requestSubmit();
+                    }}
+                    disabled={modalSaving}
+                    className="inline-flex items-center gap-2 px-6 py-2.5 rounded-lg bg-blue-600 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-60 transition-colors shadow-sm"
+                  >
+                    {modalSaving ? (
+                      <Icon
+                        name="mdi:loading"
+                        className="w-4 h-4 animate-spin"
+                      />
+                    ) : (
+                      <Icon
+                        name={
+                          editingLead
+                            ? "mdi:check-circle-outline"
+                            : "mdi:plus-circle-outline"
+                        }
+                        className="w-4 h-4"
+                      />
+                    )}
+                    {modalSaving
+                      ? "Saving…"
+                      : editingLead
+                        ? "Update Lead"
+                        : "Create Lead"}
+                  </button>
+                </div>
+              </div>
+            </div>
           </div>,
           document.body,
         )}

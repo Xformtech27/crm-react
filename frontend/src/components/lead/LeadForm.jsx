@@ -48,10 +48,14 @@ export default function LeadForm({ initial, loading, onSubmit }) {
 
   function handleSubmit(e) {
     e?.preventDefault()
-    onSubmit?.({ ...form, noOfEmployee: form.noOfEmployee ? Number(form.noOfEmployee) : undefined })
+    onSubmit?.({
+      ...form,
+      noOfEmployee: form.noOfEmployee ? Number(form.noOfEmployee) : undefined,
+    })
   }
 
   const inputCls = 'w-full px-3 py-2 text-sm border border-gray-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400 placeholder-gray-300 transition-colors'
+
   const selectCls = 'w-full px-3 py-2 text-sm border border-gray-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400 text-gray-700 transition-colors appearance-none'
   const labelCls = 'block text-xs font-semibold text-gray-600 mb-1.5'
 
@@ -169,7 +173,16 @@ export default function LeadForm({ initial, loading, onSubmit }) {
           </div>
           <div>
             <label className={labelCls}>Lead Type</label>
-            <input type="text" value={form.leadType} onChange={(e) => set('leadType', e.target.value)} placeholder="e.g. Hot, Warm, Cold" className={inputCls} />
+            <select 
+              value={form.leadType} 
+              onChange={(e) => set('leadType', e.target.value)} 
+              className={selectCls}
+            >
+              <option value="">Select lead type...</option>
+              <option value="Hot">Hot</option>
+              <option value="Warm">Warm</option>
+              <option value="Cold">Cold</option>
+            </select>
           </div>
           <div>
             <label className={labelCls}>Country</label>

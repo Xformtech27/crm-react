@@ -780,7 +780,21 @@ import { ACTIVITY_TYPE_COLORS } from "./activities/ActivitiesPage";
 import Icon from "../components/Icon";
 import AppModal from "../components/common/AppModal";
 import { useTask } from "../hooks/useTask";
+<<<<<<< HEAD
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from "recharts";
+=======
+import {
+  LineChart,
+  Line,
+  XAxis,
+  YAxis,
+  Tooltip,
+  ResponsiveContainer,
+  PieChart,
+  Pie,
+  Cell,
+} from "recharts";
+>>>>>>> ea4ea06cab0c9d000a065b39aab35625a800bafa
 
 const moduleMap = {
   pipeline: {
@@ -1050,6 +1064,7 @@ function AnalyticsDashboard() {
     const fetchAnalyticsData = async () => {
       try {
         const state = await load(true);
+<<<<<<< HEAD
         
         // Calculate revenue from deals
         const deals = state.dealsList || [];
@@ -1062,11 +1077,35 @@ function AnalyticsDashboard() {
         const lostLeads = leads.filter(l => l.status === "Lost" || l.stage === "Closed Lost").length;
         const conversionRate = activeLeads ? ((convertedLeads / activeLeads) * 100).toFixed(1) : 0;
         
+=======
+
+        // Calculate revenue from deals
+        const deals = state.dealsList || [];
+        const totalRevenue = deals.reduce(
+          (sum, deal) => sum + (Number(deal.value) || 0),
+          0,
+        );
+
+        // Calculate leads data (adjust based on your actual leads structure)
+        const leads = state.leadsList || [];
+        const activeLeads = leads.length;
+        const convertedLeads = leads.filter(
+          (l) => l.status === "Converted" || l.stage === "Closed Won",
+        ).length;
+        const lostLeads = leads.filter(
+          (l) => l.status === "Lost" || l.stage === "Closed Lost",
+        ).length;
+        const conversionRate = activeLeads
+          ? ((convertedLeads / activeLeads) * 100).toFixed(1)
+          : 0;
+
+>>>>>>> ea4ea06cab0c9d000a065b39aab35625a800bafa
         setStats({
           totalRevenue,
           activeLeads,
           conversionRate,
         });
+<<<<<<< HEAD
         
         setLeadData([
           { name: "New Leads", value: Math.max(0, activeLeads - convertedLeads - lostLeads) },
@@ -1074,13 +1113,30 @@ function AnalyticsDashboard() {
           { name: "Lost", value: lostLeads },
         ]);
         
+=======
+
+        setLeadData([
+          {
+            name: "New Leads",
+            value: Math.max(0, activeLeads - convertedLeads - lostLeads),
+          },
+          { name: "Converted", value: convertedLeads },
+          { name: "Lost", value: lostLeads },
+        ]);
+
+>>>>>>> ea4ea06cab0c9d000a065b39aab35625a800bafa
         // Process weekly sales data from deals closed dates
         const weeklySales = [0, 0, 0, 0, 0, 0, 0];
         const today = new Date();
         const startOfWeek = new Date(today);
         startOfWeek.setDate(today.getDate() - today.getDay());
+<<<<<<< HEAD
         
         deals.forEach(deal => {
+=======
+
+        deals.forEach((deal) => {
+>>>>>>> ea4ea06cab0c9d000a065b39aab35625a800bafa
           if (deal.closeDate && deal.status === "Closed Won") {
             const closeDate = new Date(deal.closeDate);
             if (closeDate >= startOfWeek && closeDate <= today) {
@@ -1089,7 +1145,11 @@ function AnalyticsDashboard() {
             }
           }
         });
+<<<<<<< HEAD
         
+=======
+
+>>>>>>> ea4ea06cab0c9d000a065b39aab35625a800bafa
         setSalesData([
           { name: "Mon", value: weeklySales[1] },
           { name: "Tue", value: weeklySales[2] },
@@ -1099,12 +1159,19 @@ function AnalyticsDashboard() {
           { name: "Sat", value: weeklySales[6] },
           { name: "Sun", value: weeklySales[0] },
         ]);
+<<<<<<< HEAD
         
+=======
+>>>>>>> ea4ea06cab0c9d000a065b39aab35625a800bafa
       } catch (error) {
         console.error("Error fetching analytics data:", error);
       }
     };
+<<<<<<< HEAD
     
+=======
+
+>>>>>>> ea4ea06cab0c9d000a065b39aab35625a800bafa
     fetchAnalyticsData();
   }, [load]);
 
@@ -1112,7 +1179,58 @@ function AnalyticsDashboard() {
 
   const handleExportReport = () => {
     console.log("Exporting report...");
+<<<<<<< HEAD
     alert("Report export feature coming soon!");
+=======
+    const handleExportReport = () => {
+      // Get current data from your state
+      const currentSalesData = salesData; // or salesDataState if you're using state
+      const currentLeadData = leadData; // or pieData
+      const currentStats = stats;
+
+      // Create CSV content
+      let csvContent = "";
+
+      // Add header
+      csvContent += "CRM Analytics Report\n";
+      csvContent += `Generated: ${new Date().toLocaleString()}\n\n`;
+
+      // Add summary section
+      csvContent += "SUMMARY STATISTICS\n";
+      csvContent += "--------------------\n";
+      csvContent += `Total Revenue,${currentStats.totalRevenue || "$48,320"}\n`;
+      csvContent += `Active Leads,${currentStats.activeLeads || "1,245"}\n`;
+      csvContent += `Conversion Rate,${currentStats.conversionRate || "32.4%"}\n\n`;
+
+      // Add weekly sales
+      csvContent += "WEEKLY SALES\n";
+      csvContent += "--------------------\n";
+      csvContent += "Day,Revenue (USD)\n";
+      currentSalesData.forEach((day) => {
+        csvContent += `${day.name},${day.value}\n`;
+      });
+      csvContent += "\n";
+
+      // Add lead distribution
+      csvContent += "LEAD DISTRIBUTION\n";
+      csvContent += "--------------------\n";
+      csvContent += "Category,Count\n";
+      currentLeadData.forEach((category) => {
+        csvContent += `${category.name},${category.value}\n`;
+      });
+
+      // Download file
+      const blob = new Blob([csvContent], { type: "text/csv" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `crm_report_${new Date().toISOString().split("T")[0]}.csv`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    };
+>>>>>>> ea4ea06cab0c9d000a065b39aab35625a800bafa
   };
 
   // Simple Card component inline
@@ -1120,9 +1238,17 @@ function AnalyticsDashboard() {
     <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-4">
       <p className="text-sm text-gray-500">{title}</p>
       <h2 className="text-2xl font-bold mt-1">
+<<<<<<< HEAD
         {typeof value === 'number' && title === 'Total Revenue' ? `$${value.toLocaleString()}` : 
          typeof value === 'number' ? value.toLocaleString() : 
          value}
+=======
+        {typeof value === "number" && title === "Total Revenue"
+          ? `₹${value.toLocaleString()}`
+          : typeof value === "number"
+            ? value.toLocaleString()
+            : value}
+>>>>>>> ea4ea06cab0c9d000a065b39aab35625a800bafa
       </h2>
     </div>
   );
@@ -1133,9 +1259,17 @@ function AnalyticsDashboard() {
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-2xl font-bold">Analytics CRM</h1>
+<<<<<<< HEAD
           <p className="text-gray-500 text-sm">Overview of your sales & leads performance</p>
         </div>
         <button 
+=======
+          <p className="text-gray-500 text-sm">
+            Overview of your sales & leads performance
+          </p>
+        </div>
+        <button
+>>>>>>> ea4ea06cab0c9d000a065b39aab35625a800bafa
           onClick={handleExportReport}
           className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium"
         >
@@ -1158,10 +1292,22 @@ function AnalyticsDashboard() {
             <LineChart data={salesData}>
               <XAxis dataKey="name" />
               <YAxis />
+<<<<<<< HEAD
               <Tooltip 
                 formatter={(value) => [`$${value.toLocaleString()}`, "Revenue"]}
               />
               <Line type="monotone" dataKey="value" stroke="#6366F1" strokeWidth={3} />
+=======
+              <Tooltip
+                formatter={(value) => [`₹${value.toLocaleString()}`, "Revenue"]}
+              />
+              <Line
+                type="monotone"
+                dataKey="value"
+                stroke="#6366F1"
+                strokeWidth={3}
+              />
+>>>>>>> ea4ea06cab0c9d000a065b39aab35625a800bafa
             </LineChart>
           </ResponsiveContainer>
         </div>
@@ -1175,10 +1321,22 @@ function AnalyticsDashboard() {
                 dataKey="value"
                 nameKey="name"
                 outerRadius={100}
+<<<<<<< HEAD
                 label={({ name, percent }) => percent > 0 ? `${name}: ${(percent * 100).toFixed(0)}%` : ''}
               >
                 {leadData.map((entry, index) => (
                   <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+=======
+                label={({ name, percent }) =>
+                  percent > 0 ? `${name}: ${(percent * 100).toFixed(0)}%` : ""
+                }
+              >
+                {leadData.map((entry, index) => (
+                  <Cell
+                    key={`cell-${index}`}
+                    fill={COLORS[index % COLORS.length]}
+                  />
+>>>>>>> ea4ea06cab0c9d000a065b39aab35625a800bafa
                 ))}
               </Pie>
               <Tooltip />
@@ -1192,7 +1350,6 @@ function AnalyticsDashboard() {
 
 function CalendarMonthView() {
   const { load } = useAdvancedCrmData();
-  const activityApi = useActivity();
   const calendarApi = useCalendar();
   const taskApi = useTask();
   const navigate = useNavigate();
@@ -1211,14 +1368,34 @@ function CalendarMonthView() {
 
   const fetchEvents = async () => {
     try {
-      const data = await calendarApi.getAllEvents();
-      const rawEvents = data.events || [];
+      const [calendarData, savedTasks] = await Promise.all([
+        calendarApi.getAllEvents().catch(() => ({ events: [] })),
+        taskApi.getAll().catch(() => []),
+      ]);
+      const taskEvents = (Array.isArray(savedTasks) ? savedTasks : []).map((task) => ({
+        type: "task",
+        id: task.taskId,
+        title: task.taskName,
+        date: task.taskDueDate || task.taskStartDate || task.taskCompletedDate,
+        priority: task.taskPriority,
+        status: task.taskPercentageCompleted,
+        note: task.taskDescription,
+        owner: task.taskAssign || task.taskAssignedTo,
+      }));
+      const reminderEvents = (calendarData.events || []).filter((event) => event.type !== "task");
+      const rawEvents = [...taskEvents, ...reminderEvents];
 
       const mappedEvents = rawEvents.map((e) => {
         let type;
         if (e.type === "task") {
           const priority = String(e.priority || "").toLowerCase();
-          type = priority === "meeting" ? "Meeting" : "Task";
+          if (priority === "meeting") {
+            type = "Meeting";
+          } else if (priority === "reminder") {
+            type = "Reminder";
+          } else {
+            type = "Task";
+          }
         } else {
           type = "Reminder";
         }
@@ -1293,56 +1470,40 @@ function CalendarMonthView() {
     });
   };
 
+  const getCalendarDate = () => (form.time ? form.time.slice(0, 10) : "");
+  const getCalendarPriority = () => {
+    if (form.type === "Meeting") return "meeting";
+    if (form.type === "Reminder") return "reminder";
+    return "Medium";
+  };
+
   const handleSave = async (e) => {
     e.preventDefault();
     setSaving(true);
     try {
       const isoTime = form.time ? new Date(form.time).toISOString() : "";
+      const calendarDate = getCalendarDate();
 
-      if (form.type === "Task") {
-        const taskPayload = {
-          taskName: form.title,
-          taskDueDate: isoTime,
-          taskStartDate: isoTime,
-          taskDescription: form.note,
-          taskPriority: "Medium",
-          taskStatus: "To Do",
-        };
-        const createdTask = await taskApi.create(taskPayload);
-        setEvents((prev) => [
-          ...prev,
-          {
-            id: `task-${createdTask?.taskId || Date.now()}`,
-            title: form.title,
-            type: "Task",
-            time: isoTime,
-            note: form.note,
-            owner: createdTask?.taskAssign || createdTask?.taskAssignedTo,
-          },
-        ]);
-      } else {
-        const activityPayload = {
+      const taskPayload = {
+        taskName: form.title,
+        taskDueDate: calendarDate,
+        taskStartDate: calendarDate,
+        taskDescription: form.note,
+        taskPriority: getCalendarPriority(),
+        taskPercentageCompleted: 0,
+      };
+      const createdTask = await taskApi.create(taskPayload);
+      setEvents((prev) => [
+        ...prev,
+        {
+          id: `task-${createdTask?.taskId || Date.now()}`,
           title: form.title,
           type: form.type,
-          subject: form.subject,
-          owner: form.owner,
           time: isoTime,
           note: form.note,
-        };
-        const createdActivity = await activityApi.create(activityPayload);
-        setEvents((prev) => [
-          ...prev,
-          {
-            id: createdActivity?.id || Date.now(),
-            title: form.title,
-            type: form.type,
-            time: isoTime,
-            note: form.note,
-            owner: form.owner,
-            subject: form.subject,
-          },
-        ]);
-      }
+          owner: createdTask?.taskAssign || createdTask?.taskAssignedTo,
+        },
+      ]);
       setShowModal(false);
     } finally {
       setSaving(false);

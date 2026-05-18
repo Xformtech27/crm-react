@@ -22,6 +22,7 @@ const pageTitles = {
   "/project": "Projects",
   "/task": "Tasks",
   "/calendar": "Calendar",
+  "/attendance": "Attendance",
   "/team": "Teams",
   "/team-member": "Team Members",
   "/create-team": "Manage Teams",
@@ -32,49 +33,63 @@ const pageTitles = {
 export default function DefaultLayout() {
   const location = useLocation();
   const navigate = useNavigate();
-  const token = useAuthStore((s) => s.token);
   const user = useAuthStore((s) => s.user);
   const isAdmin = useAuthStore((s) => s.isAdmin());
   const hasAnyPermission = useAuthStore((s) => s.hasAnyPermission);
   const { logout } = useAuth();
 
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [navSearch, setNavSearch] = useState("");
+  const [searchQuery, setSearchQuery] = useState("");
   const [quickCreateOpen, setQuickCreateOpen] = useState(false);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
+  const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
   const [commandSearch, setCommandSearch] = useState("");
   const [headerBadge, setHeaderBadge] = useState(null);
 
   const initials = useMemo(
     () => getInitials(user?.username || user?.userEmail || ""),
-    [user],
+    [user]
   );
 
   const notifications = [
     {
-      title: "3 deals entered negotiation",
-      description: "Pipeline movement is above the weekly average.",
+      id: 1,
+      title: "New lead assigned",
+      description: "John Smith has been assigned to you",
+      time: "5 min ago",
+      read: false,
+      type: "lead",
     },
     {
-      title: "2 reports are ready for review",
-      description: "Forecast and win/loss summaries were refreshed.",
+      id: 2,
+      title: "Deal won 🎉",
+      description: "Enterprise deal closed at $50,000",
+      time: "1 hour ago",
+      read: false,
+      type: "deal",
     },
     {
-      title: "Lead scoring workflow flagged 5 hot leads",
-      description: "Recommended for immediate follow-up.",
+      id: 3,
+      title: "Meeting reminder",
+      description: "Team sync in 30 minutes",
+      time: "2 hours ago",
+      read: true,
+      type: "reminder",
     },
   ];
 
-  function canAccess(item) {
+  const unreadCount = notifications.filter(n => !n.read).length;
+
+  const canAccess = (item) => {
     if (!item.permissions || item.permissions.length === 0) return true;
     return isAdmin || hasAnyPermission(item.permissions);
-  }
+  };
 
   const navGroups = useMemo(() => {
-    const base = [
+    const groups = [
       {
-        label: "Workspace",
+        label: "MAIN",
         items: [
           {
             to: "/home",
@@ -101,12 +116,12 @@ export default function DefaultLayout() {
           {
             to: "/attendance",
             label: "Attendance",
-            icon: "mdi:clock-check-outline"
-          }
+            icon: "mdi:clock-check-outline",
+          },
         ],
       },
       {
-        label: "Revenue",
+        label: "SALES",
         items: [
           {
             to: "/lead",
@@ -147,7 +162,7 @@ export default function DefaultLayout() {
         ],
       },
       {
-        label: "Delivery",
+        label: "PROJECTS",
         items: [
           {
             to: "/project",
@@ -161,7 +176,11 @@ export default function DefaultLayout() {
             icon: "mdi:checkbox-marked-circle-outline",
             permissions: ["tasks.view"],
           },
-          { to: "/team", label: "Teams", icon: "mdi:account-group-outline" },
+          {
+            to: "/team",
+            label: "Teams",
+            icon: "mdi:account-group-outline",
+          },
           {
             to: "/team-member",
             label: "Team Members",
@@ -170,23 +189,31 @@ export default function DefaultLayout() {
         ],
       },
       {
-        label: "Intelligence",
+        label: "ANALYTICS",
         items: [
-          { to: "/analytics", label: "Analytics", icon: "mdi:chart-donut" },
+          {
+            to: "/analytics",
+            label: "Analytics",
+            icon: "mdi:chart-donut",
+          },
           {
             to: "/reports",
             label: "Reports",
             icon: "mdi:file-chart-outline",
             permissions: ["reports.view"],
           },
-          { to: "/automation", label: "Automation", icon: "mdi:robot-outline" },
+          {
+            to: "/automation",
+            label: "Automation",
+            icon: "mdi:robot-outline",
+          },
         ],
       },
     ];
 
     if (isAdmin) {
-      base.push({
-        label: "Admin",
+      groups.push({
+        label: "ADMIN",
         items: [
           {
             to: "/create-team",
@@ -198,18 +225,25 @@ export default function DefaultLayout() {
             label: "Roles & Permissions",
             icon: "mdi:shield-account-outline",
           },
-          { to: "/settings", label: "Settings", icon: "mdi:cog-outline" },
+          {
+            to: "/settings",
+            label: "Settings",
+            icon: "mdi:cog-outline",
+          },
         ],
       });
     }
 
-    return base
-      .map((group) => ({ ...group, items: group.items.filter(canAccess) }))
+    return groups
+      .map((group) => ({
+        ...group,
+        items: group.items.filter(canAccess),
+      }))
       .filter((group) => group.items.length > 0);
-  }, [isAdmin, user]);
+  }, [isAdmin]);
 
   const filteredNavGroups = useMemo(() => {
-    const query = navSearch.trim().toLowerCase();
+    const query = searchQuery.trim().toLowerCase();
     if (!query) return navGroups;
     return navGroups
       .map((group) => ({
@@ -217,77 +251,92 @@ export default function DefaultLayout() {
         items: group.items.filter(
           (item) =>
             item.label.toLowerCase().includes(query) ||
-            item.to.toLowerCase().includes(query),
+            item.to.toLowerCase().includes(query)
         ),
       }))
       .filter((group) => group.items.length > 0);
-  }, [navGroups, navSearch]);
+  }, [navGroups, searchQuery]);
 
   const commandItems = useMemo(() => {
     const allItems = navGroups.flatMap((g) => g.items);
     const query = commandSearch.trim().toLowerCase();
-    if (!query) return allItems;
+    if (!query) return allItems.slice(0, 10);
     return allItems.filter(
       (item) =>
         item.label.toLowerCase().includes(query) ||
-        item.to.toLowerCase().includes(query),
+        item.to.toLowerCase().includes(query)
     );
   }, [navGroups, commandSearch]);
 
   const quickCreateItems = [
-    { to: "/lead", label: "Lead", icon: "mdi:account-plus-outline" },
-    { to: "/deals", label: "Deal", icon: "mdi:cash-plus" },
-    { to: "/activities", label: "Activity", icon: "mdi:timeline-plus-outline" },
-    { to: "/reports", label: "Report", icon: "mdi:file-chart-outline" },
+    { to: "/lead", label: "New Lead", icon: "mdi:account-plus-outline", color: "blue" },
+    { to: "/deals", label: "New Deal", icon: "mdi:cash-plus", color: "green" },
+    { to: "/activities", label: "Log Activity", icon: "mdi:timeline-plus-outline", color: "purple" },
+    { to: "/contact", label: "New Contact", icon: "mdi:account-plus", color: "orange" },
   ];
 
   const pageTitle = useMemo(() => {
     for (const [path, title] of Object.entries(pageTitles)) {
-      if (
-        location.pathname === path ||
-        location.pathname.startsWith(`${path}/`)
-      )
+      if (location.pathname === path || location.pathname.startsWith(`${path}/`)) {
         return title;
+      }
     }
-    return "CRM";
+    return "Dashboard";
   }, [location.pathname]);
 
-  function isActive(path) {
-    return (
-      location.pathname === path || location.pathname.startsWith(`${path}/`)
-    );
-  }
+  const isActive = (path) => {
+    return location.pathname === path || location.pathname.startsWith(`${path}/`);
+  };
 
-  function goToRoute(path) {
+  const navigateTo = (path) => {
     setQuickCreateOpen(false);
     setNotificationsOpen(false);
     setCommandPaletteOpen(false);
+    setUserMenuOpen(false);
     setSidebarOpen(false);
     navigate(path);
-  }
+  };
 
+  // Close sidebar on route change on mobile
   useEffect(() => {
     setSidebarOpen(false);
   }, [location.pathname]);
 
+  // Keyboard shortcut for command palette
   useEffect(() => {
-    function onKeyDown(e) {
-      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k") {
+    const handleKeyDown = (e) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === "k") {
         e.preventDefault();
         setCommandPaletteOpen(true);
       }
-    }
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, []);
+      if (e.key === "Escape" && commandPaletteOpen) {
+        setCommandPaletteOpen(false);
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [commandPaletteOpen]);
+
+  // Close user menu when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (userMenuOpen && !e.target.closest(".user-menu")) {
+        setUserMenuOpen(false);
+      }
+    };
+    document.addEventListener("click", handleClickOutside);
+    return () => document.removeEventListener("click", handleClickOutside);
+  }, [userMenuOpen]);
 
   return (
     <div className="flex h-screen overflow-hidden bg-[radial-gradient(circle_at_top_left,_rgba(59,130,246,0.16),_transparent_28%),linear-gradient(180deg,_#f8fbff_0%,_#eef4ff_46%,_#f8fafc_100%)]">
       {/* Sidebar */}
       <aside
-        className={`fixed inset-y-0 left-0 z-40 flex flex-col w-72 border-r border-white/60 bg-white/92 shadow-[0_22px_48px_rgba(15,23,42,0.08)] backdrop-blur-xl transition-transform duration-300 ${sidebarOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0"}`}
+        className={`fixed inset-y-0 left-0 z-40 flex flex-col w-72 border-r border-white/60 bg-white/92 shadow-[0_22px_48px_rgba(15,23,42,0.08)] backdrop-blur-xl transition-transform duration-300 ${
+          sidebarOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0"
+        }`}
       >
-        {/* Logo */}
+        {/* Logo Area */}
         <div className="px-5 py-4 border-b border-slate-100">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-xl bg-[linear-gradient(135deg,#2563eb_0%,#4f46e5_52%,#0f172a_100%)] flex items-center justify-center shadow-md shadow-blue-200/70">
@@ -318,7 +367,6 @@ export default function DefaultLayout() {
             <div className="mt-3 h-2 rounded-full bg-white/10 overflow-hidden">
               <div className="h-full w-[78%] rounded-full bg-[linear-gradient(90deg,#60a5fa,#34d399)]" />
             </div>
-            {/* <p className="mt-3 text-xs text-slate-300">Healthy pipeline velocity with strong enterprise close potential this month.</p> */}
           </div>
 
           <div className="mt-3 relative">
@@ -328,8 +376,8 @@ export default function DefaultLayout() {
             />
             <input
               type="text"
-              value={navSearch}
-              onChange={(e) => setNavSearch(e.target.value)}
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
               placeholder="Filter sidebar modules..."
               className="w-full rounded-2xl border border-slate-200 bg-white px-10 py-2.5 text-sm text-slate-700 shadow-sm outline-none transition-all focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/15"
             />
@@ -375,37 +423,34 @@ export default function DefaultLayout() {
                 {user?.role}
               </p>
             </div>
-            <button
-              onClick={logout}
-              className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all opacity-0 group-hover:opacity-100"
-            >
-              <Icon name="mdi:logout-variant" className="w-4 h-4" />
-            </button>
           </div>
         </div>
       </aside>
 
       {/* Main content */}
-      <div className="flex-1 flex flex-col md:ml-72 min-w-0">
-        {/* Header */}
-        <header className="min-h-[72px] border-b border-white/70 bg-white/85 backdrop-blur-xl px-4 shadow-header sticky top-0 z-30 md:px-6">
-          <div className="grid h-[72px] grid-cols-[auto_1fr] items-center gap-3 xl:grid-cols-[360px_minmax(320px,460px)_1fr]">
-            <button
-              onClick={() => setSidebarOpen((v) => !v)}
-              className="md:hidden inline-flex h-10 w-10 items-center justify-center rounded-xl text-slate-500 hover:bg-slate-100 transition-colors"
-            >
-              <Icon name="mdi:menu" className="w-5 h-5" />
-            </button>
-            <div className="min-w-0">
-              <div className="flex items-center gap-2">
-                <div className="hidden h-9 w-1 rounded-full bg-gradient-to-b from-indigo-600 to-sky-500 md:block" />
-                <div className="min-w-0">
-                  <div className="flex items-center gap-2">
-                    <h1 className="truncate text-xl font-bold leading-6 text-slate-900">
+      <div className="flex-1 flex flex-col md:ml-72 min-w-0 overflow-hidden">
+        {/* Header - Fixed positioning */}
+        <header className="flex-shrink-0 border-b border-white/70 bg-white/85 backdrop-blur-xl shadow-header sticky top-0 z-30">
+          <div className="px-4 md:px-6 py-3">
+            <div className="flex items-center justify-between gap-4">
+              {/* Left section */}
+              <div className="flex items-center gap-4 min-w-0 flex-1">
+                <button
+                  onClick={() => setSidebarOpen((v) => !v)}
+                  className="md:hidden inline-flex h-10 w-10 items-center justify-center rounded-xl text-slate-500 hover:bg-slate-100 transition-colors flex-shrink-0"
+                >
+                  <Icon name="mdi:menu" className="w-5 h-5" />
+                </button>
+                
+                <div className="hidden h-9 w-1 rounded-full bg-gradient-to-b from-indigo-600 to-sky-500 md:block flex-shrink-0" />
+                
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <h1 className="text-xl font-bold leading-6 text-slate-900 truncate">
                       {pageTitle}
                     </h1>
                     {headerBadge != null && (
-                      <span className="inline-flex items-center justify-center px-2.5 py-0.5 rounded-full text-xs font-bold bg-blue-100 text-blue-700 min-w-[2rem]">
+                      <span className="inline-flex items-center justify-center px-2.5 py-0.5 rounded-full text-xs font-bold bg-blue-100 text-blue-700 whitespace-nowrap">
                         {headerBadge}
                       </span>
                     )}
@@ -415,73 +460,76 @@ export default function DefaultLayout() {
                   </p>
                 </div>
               </div>
-            </div>
-            <button
-              type="button"
-              className="hidden h-11 min-w-0 items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white px-4 text-sm text-slate-500 shadow-sm transition-colors hover:border-indigo-300 hover:text-indigo-600 lg:flex"
-              onClick={() => setCommandPaletteOpen(true)}
-            >
-              <span className="flex min-w-0 items-center gap-2">
-                <Icon name="mdi:magnify" className="h-4 w-4 shrink-0" />
-                <span className="truncate">
-                  Search records, workflows, reports...
-                </span>
-              </span>
-              <span className="shrink-0 rounded-lg bg-slate-100 px-2 py-1 text-[11px] leading-none text-slate-500">
-                Ctrl K
-              </span>
-            </button>
 
-            <div className="col-start-2 flex min-w-0 justify-end xl:col-start-3">
-              <div className="flex shrink-0 items-center gap-2">
+              {/* Right section */}
+              <div className="flex items-center gap-2 flex-shrink-0">
+                {/* Search Button */}
                 <button
                   type="button"
-                  className="hidden h-11 items-center gap-2 whitespace-nowrap rounded-2xl border border-slate-200 bg-slate-950 px-4 text-sm font-semibold text-white shadow-sm md:inline-flex"
+                  className="hidden lg:flex h-10 items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-500 shadow-sm transition-colors hover:border-indigo-300 hover:text-indigo-600 whitespace-nowrap"
+                  onClick={() => setCommandPaletteOpen(true)}
+                >
+                  <Icon name="mdi:magnify" className="h-4 w-4 shrink-0" />
+                  <span className="truncate">Search...</span>
+                  <kbd className="rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-medium text-slate-500">
+                    ⌘K
+                  </kbd>
+                </button>
+
+                {/* Quick Create */}
+                <button
+                  type="button"
+                  className="hidden md:flex h-10 items-center gap-2 rounded-xl border border-slate-200 bg-slate-950 px-3 text-sm font-semibold text-white shadow-sm whitespace-nowrap"
                   onClick={() => setQuickCreateOpen(true)}
                 >
                   <Icon name="mdi:plus" className="w-4 h-4" />
-                  Quick Create
+                  <span>Quick Create</span>
                 </button>
-                <div className="hidden h-11 items-center gap-2 whitespace-nowrap rounded-2xl border border-slate-100 bg-white px-3 text-sm text-slate-500 shadow-sm xl:flex">
-                  <Icon
-                    name="mdi:calendar-today"
-                    className="w-3.5 h-3.5 text-indigo-500"
-                  />
-                  {new Date().toLocaleDateString("en-IN", {
+
+                {/* Calendar */}
+                <div className="hidden xl:flex h-10 items-center gap-2 rounded-xl border border-slate-100 bg-white px-3 text-sm text-slate-500 shadow-sm whitespace-nowrap">
+                  <Icon name="mdi:calendar-today" className="w-3.5 h-3.5 text-indigo-500" />
+                  <span>{new Date().toLocaleDateString("en-IN", {
                     day: "numeric",
                     month: "short",
                     year: "numeric",
-                  })}
+                  })}</span>
                 </div>
+
+                {/* Notifications */}
                 <button
                   type="button"
-                  className="hidden h-11 w-11 items-center justify-center rounded-2xl border border-slate-100 bg-white text-slate-500 shadow-sm md:inline-flex"
+                  className="relative h-10 w-10 items-center justify-center rounded-xl border border-slate-100 bg-white text-slate-500 shadow-sm hidden md:inline-flex flex-shrink-0"
                   onClick={() => setNotificationsOpen(true)}
                 >
                   <Icon name="mdi:bell-outline" className="w-5 h-5" />
+                  {unreadCount > 0 && (
+                    <span className="absolute -top-1 -right-1 h-4 w-4 rounded-full bg-red-500 text-[10px] font-bold text-white flex items-center justify-center">
+                      {unreadCount}
+                    </span>
+                  )}
                 </button>
-                <div className="flex h-11 items-center gap-2 whitespace-nowrap">
-                  <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-br from-indigo-500 to-blue-500 text-xs font-bold text-white shadow-sm">
-                    {initials}
-                  </div>
-                  <span className="hidden max-w-28 truncate text-sm font-semibold text-slate-700 xl:block">
-                    {user?.username}
-                  </span>
-                </div>
+
+                {/* Logout Button */}
                 <button
                   onClick={logout}
-                  className="flex h-11 items-center gap-1.5 whitespace-nowrap rounded-2xl border border-transparent px-2.5 text-sm font-medium text-slate-500 transition-all hover:border-red-100 hover:bg-red-50 hover:text-red-600 md:px-3"
+                  className="flex h-10 items-center gap-2 rounded-xl border border-red-200 bg-white px-3 text-sm font-medium text-red-600 transition-all hover:bg-red-50 hover:border-red-300 shadow-sm whitespace-nowrap"
                 >
                   <Icon name="mdi:logout-variant" className="w-4 h-4" />
-                  <span className="hidden lg:block">Logout</span>
+                  <span className="hidden lg:inline">Logout</span>
                 </button>
+
+                {/* User Avatar */}
+                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-indigo-500 to-blue-500 text-xs font-bold text-white shadow-sm flex-shrink-0">
+                  {initials}
+                </div>
               </div>
             </div>
           </div>
         </header>
 
         {/* Page content */}
-        <main className="flex-1 overflow-y-auto p-3 md:p-5 animate-fade-in crm-grid-bg">
+        <main className="flex-1 overflow-y-auto p-3 md:p-5 animate-fade-in">
           <Outlet context={{ setHeaderBadge }} />
         </main>
       </div>
@@ -501,26 +549,23 @@ export default function DefaultLayout() {
         title="Quick Create"
         size="lg"
       >
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <div className="grid gap-3 sm:grid-cols-2">
           {quickCreateItems.map((item) => (
             <button
               key={item.to}
-              type="button"
-              className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4 text-left transition-all hover:border-indigo-300 hover:bg-indigo-50"
-              onClick={() => goToRoute(item.to)}
+              onClick={() => navigateTo(item.to)}
+              className="group flex items-center gap-4 rounded-lg border border-gray-200 p-4 transition-all hover:border-blue-200 hover:bg-blue-50"
             >
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-2xl bg-white border border-slate-200 flex items-center justify-center text-slate-600">
-                  <Icon name={item.icon} className="w-5 h-5" />
-                </div>
-                <div>
-                  <p className="text-sm font-semibold text-slate-800">
-                    {item.label}
-                  </p>
-                  <p className="text-xs text-slate-500 mt-1">
-                    Jump directly to {item.label.toLowerCase()}
-                  </p>
-                </div>
+              <div
+                className={`flex h-12 w-12 items-center justify-center rounded-lg bg-${item.color}-50 text-${item.color}-600`}
+              >
+                <Icon name={item.icon} className="h-6 w-6" />
+              </div>
+              <div className="text-left">
+                <p className="font-semibold text-gray-900 group-hover:text-blue-700">
+                  {item.label}
+                </p>
+                <p className="text-xs text-gray-500">Create a new {item.label.toLowerCase()}</p>
               </div>
             </button>
           ))}
@@ -532,62 +577,82 @@ export default function DefaultLayout() {
         open={notificationsOpen}
         onClose={() => setNotificationsOpen(false)}
         title="Notifications"
-        size="lg"
       >
-        <div className="space-y-3">
-          {notifications.map((note) => (
-            <div
-              key={note.title}
-              className="rounded-2xl border border-slate-100 bg-slate-50 p-4"
-            >
-              <p className="text-sm font-semibold text-slate-800">
-                {note.title}
-              </p>
-              <p className="text-xs text-slate-500 mt-1">{note.description}</p>
-            </div>
-          ))}
-        </div>
+        {notifications.length === 0 ? (
+          <div className="py-8 text-center">
+            <Icon name="mdi:bell-off" className="mx-auto h-12 w-12 text-gray-300" />
+            <p className="mt-2 text-sm text-gray-500">No notifications</p>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {notifications.map((notification) => (
+              <div
+                key={notification.id}
+                className={`rounded-lg border p-4 transition-colors ${
+                  notification.read ? "border-gray-100" : "border-blue-100 bg-blue-50/30"
+                }`}
+              >
+                <div className="flex items-start justify-between">
+                  <div className="flex-1">
+                    <p className="text-sm font-semibold text-gray-900">
+                      {notification.title}
+                    </p>
+                    <p className="mt-1 text-xs text-gray-500">{notification.description}</p>
+                    <p className="mt-2 text-xs text-gray-400">{notification.time}</p>
+                  </div>
+                  {!notification.read && (
+                    <div className="h-2 w-2 rounded-full bg-blue-600"></div>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
       </AppModal>
 
       {/* Command Palette Modal */}
       <AppModal
         open={commandPaletteOpen}
         onClose={() => setCommandPaletteOpen(false)}
-        title="Navigate Anywhere"
+        title="Command Palette"
         size="2xl"
       >
-        <div className="mb-4 relative">
+        <div className="relative mb-4">
           <Icon
             name="mdi:magnify"
-            className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400"
+            className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400"
           />
           <input
             type="text"
             value={commandSearch}
             onChange={(e) => setCommandSearch(e.target.value)}
-            className="w-full rounded-2xl border border-slate-200 bg-white px-10 py-3 text-sm text-slate-700 outline-none transition-all focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/15"
-            placeholder="Type to find routes, modules and workspaces"
+            placeholder="Search for pages, actions, or settings..."
+            className="w-full rounded-lg border border-gray-200 py-2.5 pl-9 pr-3 text-sm text-gray-900 placeholder:text-gray-400 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+            autoFocus
           />
         </div>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 max-h-[50vh] overflow-y-auto pr-1">
-          {commandItems.map((item) => (
-            <button
-              key={item.to}
-              type="button"
-              className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4 text-left transition-all hover:border-indigo-300 hover:bg-indigo-50"
-              onClick={() => goToRoute(item.to)}
-            >
-              <div className="flex items-center gap-3">
-                <Icon name={item.icon} className="w-5 h-5 text-slate-600" />
-                <div>
-                  <p className="text-sm font-semibold text-slate-800">
-                    {item.label}
-                  </p>
-                  <p className="text-xs text-slate-500 mt-1">{item.to}</p>
-                </div>
-              </div>
-            </button>
-          ))}
+        <div className="max-h-[50vh] overflow-y-auto">
+          {commandItems.length === 0 ? (
+            <div className="py-8 text-center">
+              <p className="text-sm text-gray-500">No results found</p>
+            </div>
+          ) : (
+            <div className="space-y-1">
+              {commandItems.map((item) => (
+                <button
+                  key={item.to}
+                  onClick={() => navigateTo(item.to)}
+                  className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left transition-colors hover:bg-gray-50"
+                >
+                  <Icon name={item.icon} className="h-5 w-5 text-gray-400" />
+                  <div>
+                    <p className="text-sm font-medium text-gray-900">{item.label}</p>
+                    <p className="text-xs text-gray-500">{item.to}</p>
+                  </div>
+                </button>
+              ))}
+            </div>
+          )}
         </div>
       </AppModal>
     </div>
