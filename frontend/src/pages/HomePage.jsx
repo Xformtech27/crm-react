@@ -9,6 +9,7 @@ import { useLead } from '../hooks/useLead'
 import { useOpportunity } from '../hooks/useOpportunity'
 import { useProject } from '../hooks/useProject'
 import { useTask } from '../hooks/useTask'
+import { useCalendar } from '../hooks/useCalendar'
 import { useAdvancedCrmData } from '../hooks/useAdvancedCrmData'
 import Icon from '../components/Icon'
 
@@ -21,12 +22,15 @@ const GRADE_COLORS = {
   D: 'bg-red-100 text-red-700 border-red-200',
 }
 const PRIORITY_COLORS = { high: 'bg-red-500', medium: 'bg-amber-400', low: 'bg-teal-400' }
-const DATE_LABELS = { today: 'Today', week: 'This Week', month: 'This Month', quarter: 'This Quarter' }
+const DATE_LABELS = { today: 'Today', week: 'This Week', month: 'This Month', quarter: 'This Quarter', all: 'All Data' }
+const DATE_RANGES = ['today', 'week', 'month', 'quarter', 'all']
 const STATUS_PALETTE = ['#10b981', '#3b82f6', '#f59e0b', '#94a3b8', '#8b5cf6', '#06b6d4', '#f97316']
 const OPP_PALETTE = ['#10b981', '#3b82f6', '#ef4444', '#f59e0b', '#8b5cf6']
 const SOURCE_PALETTE = ['#3b82f6', '#10b981', '#f59e0b', '#8b5cf6', '#ef4444', '#06b6d4', '#f97316']
 
 function getRangeBounds(range) {
+  if (range === 'all') return { all: true }
+
   const now = new Date()
   const start = new Date(now)
   start.setHours(0, 0, 0, 0)
@@ -52,8 +56,39 @@ function parseDate(value) {
 }
 
 function isInRange(value, bounds) {
+  if (bounds?.all) return true
   const date = parseDate(value)
   return !!date && date >= bounds.start && date <= bounds.end
+}
+
+function normalizeReminder(reminder) {
+  const id = reminder.leadReminderId ?? reminder.id ?? `${reminder.reminderText || reminder.title}-${reminder.reminderDate || reminder.date || reminder.time}`
+  const leadId = reminder.leadIdFk ?? reminder.leadId
+
+  return {
+    id,
+    title: reminder.reminderText || reminder.title || 'Reminder',
+    date: reminder.reminderDate || reminder.date || reminder.time,
+    owner: reminder.owner || (leadId ? `Lead #${leadId}` : 'Lead reminder'),
+    note: reminder.note || reminder.description || '',
+  }
+}
+
+function mapCalendarReminders(calendarData) {
+  const reminders = Array.isArray(calendarData?.reminders) ? calendarData.reminders : []
+  const reminderEvents = Array.isArray(calendarData?.events)
+    ? calendarData.events.filter((event) => String(event.type || '').toLowerCase() !== 'task')
+    : []
+  const seen = new Set()
+
+  return [...reminders, ...reminderEvents]
+    .map(normalizeReminder)
+    .filter((reminder) => {
+      const key = String(reminder.id)
+      if (seen.has(key)) return false
+      seen.add(key)
+      return true
+    })
 }
 
 function groupByCount(items, getKey) {
@@ -95,16 +130,20 @@ export default function HomePage() {
   const { getAll: getAllOpportunities } = useOpportunity()
   const { getAll: getAllProjects } = useProject()
   const { getAll: getAllTasks } = useTask()
+  const { getAllEvents } = useCalendar()
   const { state: advancedCrmState, load: loadAdvancedCrm } = useAdvancedCrmData()
 
   const [dateRange, setDateRange] = useState('today')
   const [activeChart, setActiveChart] = useState('status')
+  const [selectedFunnelKey, setSelectedFunnelKey] = useState('total')
   const [completedTaskIds, setCompletedTaskIds] = useState(new Set())
+  const [completedReminderIds, setCompletedReminderIds] = useState(new Set())
   const [leadsData, setLeadsData] = useState([])
   const [opportunitiesData, setOpportunitiesData] = useState([])
   const [projectsData, setProjectsData] = useState([])
   const [hotLeadsData, setHotLeadsData] = useState([])
   const [tasksData, setTasksData] = useState([])
+  const [remindersData, setRemindersData] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
 
@@ -112,9 +151,10 @@ export default function HomePage() {
     setLoading(true)
     setError(null)
     try {
-      const [hl, tasks] = await Promise.all([
+      const [hl, tasks, calendarData] = await Promise.all([
         getAllScores().catch(() => []),
         getAllTasks().catch(() => []),
+        getAllEvents().catch(() => ({ events: [], reminders: [] })),
       ])
       const [leads, opportunities, projects] = await Promise.all([
         getAllLeads().catch(() => []),
@@ -126,13 +166,14 @@ export default function HomePage() {
       setProjectsData(projects ?? [])
       setHotLeadsData(hl ?? [])
       setTasksData(tasks ?? [])
+      setRemindersData(mapCalendarReminders(calendarData))
       await loadAdvancedCrm()
     } catch (e) {
       setError(e)
     } finally {
       setLoading(false)
     }
-  }, []) // eslint-disable-line
+  }, [])
 
   useEffect(() => { fetchAll() }, [fetchAll])
 
@@ -164,6 +205,11 @@ export default function HomePage() {
       isInRange(task.taskDueDate || task.taskStartDate || task.taskCompletedDate, rangeBounds)
     ),
     [tasksData, rangeBounds]
+  )
+
+  const filteredReminders = useMemo(() =>
+    (remindersData ?? []).filter((reminder) => isInRange(reminder.date, rangeBounds)),
+    [remindersData, rangeBounds]
   )
 
   const rangeStats = useMemo(() => {
@@ -232,6 +278,19 @@ export default function HomePage() {
     [todaysTasks]
   )
 
+  const visibleReminders = useMemo(() =>
+    filteredReminders.slice(0, 6).map((reminder) => ({
+      ...reminder,
+      completed: completedReminderIds.has(reminder.id),
+    })),
+    [filteredReminders, completedReminderIds]
+  )
+
+  const completedVisibleReminders = useMemo(
+    () => visibleReminders.filter((reminder) => reminder.completed).length,
+    [visibleReminders]
+  )
+
   const filteredActivityFeed = useMemo(() =>
     (advancedCrmState.activityFeed ?? []).filter((item) => isInRange(item.time, rangeBounds)),
     [advancedCrmState.activityFeed, rangeBounds]
@@ -239,6 +298,15 @@ export default function HomePage() {
 
   function toggleTask(id) {
     setCompletedTaskIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+
+  function toggleReminder(id) {
+    setCompletedReminderIds((prev) => {
       const next = new Set(prev)
       if (next.has(id)) next.delete(id)
       else next.add(id)
@@ -302,15 +370,35 @@ export default function HomePage() {
   }), [leadSourceItems])
 
   const funnelSteps = useMemo(() => {
-    const total = rangeStats.leadAll || 1
-    return [
-      { label: 'Total Leads', count: rangeStats.leadAll ?? 0, pct: 100, color: '#3b82f6' },
-      { label: 'Contacted', count: rangeStats.leadContacted ?? 0, pct: Math.round(((rangeStats.leadContacted ?? 0) / total) * 100), color: '#06b6d4' },
-      { label: 'Qualified', count: rangeStats.leadQualified ?? 0, pct: Math.round(((rangeStats.leadQualified ?? 0) / total) * 100), color: '#10b981' },
-      { label: 'Negotiation', count: rangeStats.leadNegotiation ?? 0, pct: Math.round(((rangeStats.leadNegotiation ?? 0) / total) * 100), color: '#f59e0b' },
-      { label: 'Converted', count: rangeStats.leadConverted ?? 0, pct: Math.round(((rangeStats.leadConverted ?? 0) / total) * 100), color: '#8b5cf6' },
+    const rawSteps = [
+      { key: 'total', label: 'Total Leads', count: rangeStats.leadAll ?? 0, color: '#2563eb', icon: 'mdi:account-multiple-outline', route: '/lead' },
+      { key: 'contacted', label: 'Contacted', count: rangeStats.leadContacted ?? 0, color: '#0891b2', icon: 'mdi:phone-check-outline', route: '/lead' },
+      { key: 'qualified', label: 'Qualified', count: rangeStats.leadQualified ?? 0, color: '#059669', icon: 'mdi:account-check-outline', route: '/lead' },
+      { key: 'proposal', label: 'Proposal', count: rangeStats.leadQuotationSent ?? 0, color: '#d97706', icon: 'mdi:file-document-edit-outline', route: '/lead' },
+      { key: 'negotiation', label: 'Negotiation', count: rangeStats.leadNegotiation ?? 0, color: '#7c3aed', icon: 'mdi:handshake-outline', route: '/lead' },
+      { key: 'won', label: 'Won', count: rangeStats.opportunityWon ?? 0, color: '#16a34a', icon: 'mdi:trophy-outline', route: '/opportunity' },
     ]
+    const total = Math.max(Number(rawSteps[0].count) || 0, 1)
+    const maxCount = Math.max(...rawSteps.map((step) => Number(step.count) || 0), 1)
+
+    return rawSteps.map((step, idx) => {
+      const previousCount = idx === 0 ? total : Math.max(Number(rawSteps[idx - 1].count) || 0, 1)
+      const count = Number(step.count) || 0
+      return {
+        ...step,
+        count,
+        pct: Math.round((count / total) * 100),
+        previousPct: idx === 0 ? 100 : Math.round((count / previousCount) * 100),
+        dropOff: idx === 0 ? 0 : Math.max((Number(rawSteps[idx - 1].count) || 0) - count, 0),
+        widthPct: Math.max((count / maxCount) * 100, count > 0 ? 20 : 10),
+      }
+    })
   }, [rangeStats])
+
+  const selectedFunnelStep = useMemo(
+    () => funnelSteps.find((step) => step.key === selectedFunnelKey) || funnelSteps[0],
+    [funnelSteps, selectedFunnelKey]
+  )
 
   const chartTabs = [
     { key: 'status', label: 'Lead Status' },
@@ -325,7 +413,7 @@ export default function HomePage() {
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-2">
           <div className="flex items-center gap-0.5 bg-white border border-gray-200 rounded-xl p-1 shadow-sm">
-            {(['today', 'week', 'month', 'quarter']).map((range) => (
+            {DATE_RANGES.map((range) => (
               <button
                 key={range}
                 onClick={() => setDateRange(range)}
@@ -350,8 +438,8 @@ export default function HomePage() {
       {/* Loading Skeleton */}
       {loading && (
         <div className="space-y-4">
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-            {[...Array(8)].map((_, i) => <div key={i} className="skeleton h-24 rounded-xl" />)}
+          <div className="grid grid-cols-2 sm:grid-cols-5 gap-4">
+            {[...Array(10)].map((_, i) => <div key={i} className="skeleton h-24 rounded-xl" />)}
           </div>
           <div className="grid grid-cols-1 xl:grid-cols-[3fr_2fr] gap-5">
             <div className="space-y-4">
@@ -381,7 +469,7 @@ export default function HomePage() {
       {!loading && !error && (
         <>
           {/* KPI Row 1 */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+          <div className="grid grid-cols-2 sm:grid-cols-5 gap-4">
             <Link to="/lead" className="block bg-white rounded-xl border border-gray-100 shadow-sm p-5 border-l-4 border-l-blue-500 hover:shadow-md transition-shadow group">
               <div className="flex items-center justify-between mb-3">
                 <span className="text-xs font-semibold uppercase tracking-wide text-gray-400">Total Leads</span>
@@ -418,6 +506,19 @@ export default function HomePage() {
               <p className="text-2xl font-bold text-gray-900">{todaysTasks.length}</p>
               <p className="text-xs text-amber-500 mt-1.5 flex items-center gap-1 font-medium">
                 <Icon name="mdi:check-circle-outline" className="w-3 h-3" /> {completedVisibleTasks} completed
+              </p>
+            </Link>
+
+            <Link to="/calendar" className="block bg-white rounded-xl border border-gray-100 shadow-sm p-5 border-l-4 border-l-rose-500 hover:shadow-md transition-shadow group">
+              <div className="flex items-center justify-between mb-3">
+                <span className="text-xs font-semibold uppercase tracking-wide text-gray-400">Reminders {DATE_LABELS[dateRange]}</span>
+                <div className="w-8 h-8 rounded-lg bg-rose-50 group-hover:bg-rose-100 flex items-center justify-center transition-colors">
+                  <Icon name="mdi:bell-outline" className="w-4 h-4 text-rose-500" />
+                </div>
+              </div>
+              <p className="text-2xl font-bold text-gray-900">{visibleReminders.length}</p>
+              <p className="text-xs text-rose-500 mt-1.5 flex items-center gap-1 font-medium">
+                <Icon name="mdi:calendar-clock-outline" className="w-3 h-3" /> {completedVisibleReminders} completed
               </p>
             </Link>
 
@@ -499,26 +600,161 @@ export default function HomePage() {
                 <div className="flex items-center justify-between px-5 pt-4 pb-3 border-b border-gray-50">
                   <div>
                     <p className="text-sm font-semibold text-gray-800">Sales Funnel</p>
-                    <p className="text-xs text-gray-400 mt-0.5">Lead-to-close conversion stages</p>
+                    <p className="text-xs text-gray-400 mt-0.5">Click a stage to inspect conversion and drop-off</p>
                   </div>
-                  <Link to="/lead" className="text-xs text-blue-600 hover:text-blue-700 font-semibold">View leads →</Link>
+                  <Link to={selectedFunnelStep?.route || '/lead'} className="text-xs text-blue-600 hover:text-blue-700 font-semibold">
+                    Open stage →
+                  </Link>
                 </div>
-                <div className="p-5 space-y-2.5">
-                  {funnelSteps.map((step, idx) => (
-                    <div key={step.label} className="flex items-center gap-3">
-                      <span className="text-xs text-gray-400 font-mono w-4 shrink-0 text-center">{idx + 1}</span>
-                      <span className="text-xs text-gray-600 font-medium w-28 shrink-0 truncate">{step.label}</span>
-                      <div className="flex-1 h-5 bg-gray-100 rounded-lg overflow-hidden">
-                        <div
-                          className="h-full rounded-lg flex items-center justify-end pr-2 transition-all duration-700"
-                          style={{ width: step.pct > 0 ? `${Math.max(step.pct, 4)}%` : '0%', backgroundColor: step.color }}
+                <div className="grid gap-5 p-5 lg:grid-cols-[minmax(0,1fr)_220px]">
+                  <div className="min-w-0">
+                    <svg
+                      viewBox="0 0 640 420"
+                      role="img"
+                      aria-label="Sales funnel conversion chart"
+                      className="h-[420px] w-full"
+                    >
+                      {funnelSteps.map((step, idx) => {
+                        const sectionHeight = 58
+                        const topY = 10 + idx * sectionHeight
+                        const bottomY = topY + sectionHeight
+
+                        // Funnel sizing
+                        const maxWidth = 520
+                        const minWidth = 90
+
+                        const totalSteps = funnelSteps.length
+
+                        // current width
+                        const topWidth =
+                          maxWidth -
+                          ((maxWidth - minWidth) / totalSteps) * idx
+
+                        // next width
+                        const bottomWidth =
+                          maxWidth -
+                          ((maxWidth - minWidth) / totalSteps) * (idx + 1)
+
+                        const centerX = 320
+
+                        const topLeft = centerX - topWidth / 2
+                        const topRight = centerX + topWidth / 2
+
+                        const bottomLeft = centerX - bottomWidth / 2
+                        const bottomRight = centerX + bottomWidth / 2
+
+                        const isSelected = selectedFunnelStep?.key === step.key
+
+                        return (
+                          <g
+                            key={step.key}
+                            className="cursor-pointer"
+                            onClick={() => setSelectedFunnelKey(step.key)}
+                          >
+                            <polygon
+                              points={`
+                                ${topLeft},${topY}
+                                ${topRight},${topY}
+                                ${bottomRight},${bottomY}
+                                ${bottomLeft},${bottomY}
+                              `}
+                              fill={step.color}
+                              opacity={isSelected ? 1 : 0.88}
+                              stroke={isSelected ? '#111827' : '#ffffff'}
+                              strokeWidth={isSelected ? 3 : 2}
+                              className="transition-all duration-200 hover:opacity-100"
+                            />
+
+                            {/* Label */}
+                            <text
+                              x={centerX}
+                              y={topY + 24}
+                              textAnchor="middle"
+                              className="fill-white text-[15px] font-bold"
+                            >
+                              {step.label}
+                            </text>
+
+                            {/* Count */}
+                            <text
+                              x={centerX}
+                              y={topY + 42}
+                              textAnchor="middle"
+                              className="fill-white text-[12px] font-semibold opacity-90"
+                            >
+                              {step.count.toLocaleString('en-IN')} | {step.pct}%
+                            </text>
+                          </g>
+                        )
+                      })}
+                    </svg>
+                    <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                      {funnelSteps.map((step) => (
+                        <button
+                          key={step.key}
+                          onClick={() => setSelectedFunnelKey(step.key)}
+                          className={`flex items-center gap-2 rounded-lg border px-3 py-2 text-left transition-colors ${
+                            selectedFunnelStep?.key === step.key
+                              ? 'border-gray-900 bg-gray-900 text-white'
+                              : 'border-gray-100 bg-gray-50 text-gray-600 hover:bg-gray-100'
+                          }`}
                         >
-                          {step.pct >= 8 && <span className="text-[10px] text-white font-bold">{step.pct}%</span>}
+                          <Icon name={step.icon} className="h-4 w-4 shrink-0" />
+                          <span className="min-w-0">
+                            <span className="block truncate text-xs font-semibold">{step.label}</span>
+                            <span className={`block text-[11px] ${selectedFunnelStep?.key === step.key ? 'text-gray-300' : 'text-gray-400'}`}>
+                              {step.count.toLocaleString('en-IN')} records
+                            </span>
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="rounded-xl border border-gray-100 bg-gray-50 p-4">
+                    <div className="flex items-center gap-2">
+                      <span className="flex h-9 w-9 items-center justify-center rounded-lg text-white" style={{ backgroundColor: selectedFunnelStep?.color }}>
+                        <Icon name={selectedFunnelStep?.icon || 'mdi:chart-funnel'} className="h-5 w-5" />
+                      </span>
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-semibold text-gray-800">{selectedFunnelStep?.label}</p>
+                        <p className="text-xs text-gray-400">{DATE_LABELS[dateRange]}</p>
+                      </div>
+                    </div>
+                    <p className="mt-4 text-3xl font-bold text-gray-900">{(selectedFunnelStep?.count ?? 0).toLocaleString('en-IN')}</p>
+                    <p className="text-xs font-medium text-gray-500">records in this stage</p>
+                    <div className="mt-4 space-y-3">
+                      <div>
+                        <div className="mb-1 flex justify-between text-xs font-semibold text-gray-500">
+                          <span>Of total leads</span>
+                          <span>{selectedFunnelStep?.pct ?? 0}%</span>
+                        </div>
+                        <div className="h-2 rounded-full bg-white">
+                          <div className="h-full rounded-full" style={{ width: `${Math.min(selectedFunnelStep?.pct ?? 0, 100)}%`, backgroundColor: selectedFunnelStep?.color }} />
                         </div>
                       </div>
-                      <span className="text-xs font-bold text-gray-700 w-10 text-right shrink-0">{step.count}</span>
+                      <div>
+                        <div className="mb-1 flex justify-between text-xs font-semibold text-gray-500">
+                          <span>From previous</span>
+                          <span>{selectedFunnelStep?.previousPct ?? 0}%</span>
+                        </div>
+                        <div className="h-2 rounded-full bg-white">
+                          <div className="h-full rounded-full" style={{ width: `${Math.min(selectedFunnelStep?.previousPct ?? 0, 100)}%`, backgroundColor: selectedFunnelStep?.color }} />
+                        </div>
+                      </div>
                     </div>
-                  ))}
+                    <div className="mt-4 rounded-lg bg-white p-3 text-xs text-gray-500">
+                      <span className="font-semibold text-gray-700">Drop-off:</span>{' '}
+                      {selectedFunnelStep?.dropOff ? `${selectedFunnelStep.dropOff.toLocaleString('en-IN')} fewer than previous stage` : 'Top of funnel stage'}
+                    </div>
+                    <button
+                      onClick={() => navigate(selectedFunnelStep?.route || '/lead')}
+                      className="mt-4 flex w-full items-center justify-center gap-2 rounded-lg bg-blue-600 px-3 py-2 text-xs font-semibold text-white transition-colors hover:bg-blue-700"
+                    >
+                      <Icon name="mdi:open-in-new" className="h-4 w-4" />
+                      View records
+                    </button>
+                  </div>
                 </div>
               </div>
 
@@ -657,6 +893,46 @@ export default function HomePage() {
                   ))}
                   {!todaysTasks.length && (
                     <div className="px-5 py-5 text-center text-sm text-gray-400">No tasks found.</div>
+                  )}
+                </div>
+              </div>
+
+              {/* Reminders */}
+              <div className="bg-white rounded-xl border border-gray-100 shadow-sm">
+                <div className="flex items-center justify-between px-5 pt-4 pb-3 border-b border-gray-50">
+                  <div>
+                    <p className="text-sm font-semibold text-gray-800">Reminders - {DATE_LABELS[dateRange]}</p>
+                    <p className="text-xs text-gray-400">{completedVisibleReminders} / {visibleReminders.length} done</p>
+                  </div>
+                  <Link to="/calendar" className="text-xs text-blue-600 hover:text-blue-700 font-semibold">View all →</Link>
+                </div>
+                <div className="h-1 bg-gray-100 mx-5 mt-3 rounded-full overflow-hidden">
+                  <div
+                    className="h-full bg-rose-500 rounded-full transition-all duration-500"
+                    style={{ width: visibleReminders.length ? `${Math.round((completedVisibleReminders / visibleReminders.length) * 100)}%` : '0%' }}
+                  />
+                </div>
+                <div className="divide-y divide-gray-50 mt-1">
+                  {visibleReminders.map((reminder) => (
+                    <div
+                      key={reminder.id}
+                      className="flex items-center gap-3 px-4 py-2.5 hover:bg-gray-50/80 transition-colors cursor-pointer"
+                      onClick={() => toggleReminder(reminder.id)}
+                    >
+                      <div className={`w-[18px] h-[18px] rounded-full border-2 flex items-center justify-center shrink-0 transition-all ${
+                        reminder.completed ? 'bg-rose-500 border-rose-500' : 'border-gray-300 hover:border-rose-400'
+                      }`}>
+                        {reminder.completed && <Icon name="mdi:check" className="w-3 h-3 text-white" />}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className={`text-sm text-gray-700 truncate transition-all ${reminder.completed ? 'line-through text-gray-400' : ''}`}>{reminder.title}</p>
+                        <p className="text-xs text-gray-400 mt-0.5 truncate">{reminder.date || reminder.owner}</p>
+                      </div>
+                      <Icon name="mdi:bell-outline" className="w-4 h-4 text-rose-400 shrink-0" />
+                    </div>
+                  ))}
+                  {!visibleReminders.length && (
+                    <div className="px-5 py-5 text-center text-sm text-gray-400">No reminders found.</div>
                   )}
                 </div>
               </div>

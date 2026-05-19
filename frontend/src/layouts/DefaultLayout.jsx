@@ -4,6 +4,9 @@ import Icon from "../components/Icon";
 import AppModal from "../components/common/AppModal";
 import { useAuthStore } from "../stores/auth";
 import { useAuth } from "../hooks/useAuth";
+import { useLead } from "../hooks/useLead";
+import { useOpportunity } from "../hooks/useOpportunity";
+import { useCalendar } from "../hooks/useCalendar";
 import { getInitials } from "../utils/format";
 
 const pageTitles = {
@@ -30,6 +33,37 @@ const pageTitles = {
   "/settings": "Settings",
 };
 
+function getDateValue(...values) {
+  for (const value of values) {
+    if (!value) continue;
+    const date = new Date(value);
+    if (!Number.isNaN(date.getTime())) return date;
+  }
+  return null;
+}
+
+function formatRelativeTime(date) {
+  if (!date) return "Open now";
+  const diffMs = date.getTime() - Date.now();
+  const absMs = Math.abs(diffMs);
+  const minutes = Math.round(absMs / 60000);
+  const hours = Math.round(absMs / 3600000);
+  const days = Math.round(absMs / 86400000);
+  const suffix = diffMs >= 0 ? "from now" : "ago";
+
+  if (minutes < 60) return `${Math.max(minutes, 1)} min ${suffix}`;
+  if (hours < 24) return `${hours} hour${hours === 1 ? "" : "s"} ${suffix}`;
+  return `${days} day${days === 1 ? "" : "s"} ${suffix}`;
+}
+
+function sortByNewest(items, getDate) {
+  return [...items].sort((a, b) => {
+    const bDate = getDate(b)?.getTime() || 0;
+    const aDate = getDate(a)?.getTime() || 0;
+    return bDate - aDate;
+  });
+}
+
 export default function DefaultLayout() {
   const location = useLocation();
   const navigate = useNavigate();
@@ -37,6 +71,9 @@ export default function DefaultLayout() {
   const isAdmin = useAuthStore((s) => s.isAdmin());
   const hasAnyPermission = useAuthStore((s) => s.hasAnyPermission);
   const { logout } = useAuth();
+  const leadApi = useLead();
+  const opportunityApi = useOpportunity();
+  const calendarApi = useCalendar();
 
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
@@ -46,13 +83,21 @@ export default function DefaultLayout() {
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
   const [commandSearch, setCommandSearch] = useState("");
   const [headerBadge, setHeaderBadge] = useState(null);
+  const [readNotificationIds, setReadNotificationIds] = useState(() => {
+    try {
+      return new Set(JSON.parse(localStorage.getItem("crm-read-notifications") || "[]"));
+    } catch {
+      return new Set();
+    }
+  });
+  const [notificationItems, setNotificationItems] = useState([]);
 
   const initials = useMemo(
     () => getInitials(user?.username || user?.userEmail || ""),
     [user]
   );
 
-  const notifications = [
+  const fallbackNotifications = [
     {
       id: 1,
       title: "New lead assigned",
@@ -60,14 +105,18 @@ export default function DefaultLayout() {
       time: "5 min ago",
       read: false,
       type: "lead",
+      icon: "mdi:account-arrow-right-outline",
+      path: "/lead",
     },
     {
       id: 2,
-      title: "Deal won 🎉",
+      title: "Deal won",
       description: "Enterprise deal closed at $50,000",
       time: "1 hour ago",
       read: false,
       type: "deal",
+      icon: "mdi:trophy-outline",
+      path: "/opportunity",
     },
     {
       id: 3,
@@ -76,10 +125,99 @@ export default function DefaultLayout() {
       time: "2 hours ago",
       read: true,
       type: "reminder",
+      icon: "mdi:calendar-clock-outline",
+      path: "/calendar",
     },
   ];
 
-  const unreadCount = notifications.filter(n => !n.read).length;
+  useEffect(() => {
+    localStorage.setItem("crm-read-notifications", JSON.stringify([...readNotificationIds]));
+  }, [readNotificationIds]);
+
+  useEffect(() => {
+    let alive = true;
+
+    async function loadNotifications() {
+      const [leads, opportunities, calendarData] = await Promise.all([
+        leadApi.getAll().catch(() => []),
+        opportunityApi.getAll().catch(() => []),
+        calendarApi.getAllEvents().catch(() => ({ events: [] })),
+      ]);
+
+      const latestLead = sortByNewest(Array.isArray(leads) ? leads : [], (lead) =>
+        getDateValue(lead.leadCreatedDate, lead.inquiryDate, lead.createdAt)
+      )[0];
+      const wonDeal = sortByNewest(
+        (Array.isArray(opportunities) ? opportunities : []).filter((opp) =>
+          String(opp.oppStatus || opp.status || "").toLowerCase().includes("won")
+        ),
+        (opp) => getDateValue(opp.oppActualCloseDate, opp.oppForcastCloseDate, opp.createdAt)
+      )[0];
+      const upcomingMeeting = (calendarData.events || [])
+        .map((event) => {
+          const priority = String(event.priority || "").toLowerCase();
+          const type = priority === "meeting" ? "Meeting" : String(event.type || "");
+          return {
+            ...event,
+            type,
+            dateValue: getDateValue(event.time, event.date, event.reminderDate),
+          };
+        })
+        .filter((event) => event.dateValue && event.dateValue.getTime() >= Date.now() - 3600000)
+        .filter((event) => event.type.toLowerCase().includes("meeting") || event.type.toLowerCase().includes("reminder"))
+        .sort((a, b) => a.dateValue.getTime() - b.dateValue.getTime())[0];
+
+      const nextItems = [
+        {
+          id: latestLead ? `lead-${latestLead.leadId || latestLead.id}` : "lead-empty",
+          title: "New lead assigned",
+          description: latestLead
+            ? `${latestLead.leadName || latestLead.name || "A lead"} is ready for follow-up`
+            : "Open the lead workspace to review assignments",
+          time: formatRelativeTime(getDateValue(latestLead?.leadCreatedDate, latestLead?.inquiryDate, latestLead?.createdAt)),
+          icon: "mdi:account-arrow-right-outline",
+          path: latestLead?.leadId ? `/lead/${latestLead.leadId}` : "/lead",
+        },
+        {
+          id: wonDeal ? `deal-${wonDeal.oppId || wonDeal.id}` : "deal-empty",
+          title: "Deal won",
+          description: wonDeal
+            ? `${wonDeal.oppName || wonDeal.opportunityName || wonDeal.title || "Opportunity"} closed successfully`
+            : "Open opportunities to review won deals",
+          time: formatRelativeTime(getDateValue(wonDeal?.oppActualCloseDate, wonDeal?.oppForcastCloseDate, wonDeal?.createdAt)),
+          icon: "mdi:trophy-outline",
+          path: "/opportunity",
+        },
+        {
+          id: upcomingMeeting ? `meeting-${upcomingMeeting.type}-${upcomingMeeting.id}` : "meeting-empty",
+          title: "Meeting reminder",
+          description: upcomingMeeting
+            ? `${upcomingMeeting.title || "Calendar item"} is on your calendar`
+            : "Open calendar to review meetings, reminders, and tasks",
+          time: formatRelativeTime(upcomingMeeting?.dateValue),
+          icon: "mdi:calendar-clock-outline",
+          path: "/calendar",
+        },
+      ];
+
+      if (alive) setNotificationItems(nextItems);
+    }
+
+    loadNotifications();
+    return () => {
+      alive = false;
+    };
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const notifications = useMemo(
+    () => (notificationItems.length ? notificationItems : fallbackNotifications).map((item) => ({
+      ...item,
+      read: readNotificationIds.has(item.id),
+    })),
+    [fallbackNotifications, notificationItems, readNotificationIds]
+  );
+
+  const unreadCount = notifications.filter((n) => !n.read).length;
 
   const canAccess = (item) => {
     if (!item.permissions || item.permissions.length === 0) return true;
@@ -295,6 +433,12 @@ export default function DefaultLayout() {
     setUserMenuOpen(false);
     setSidebarOpen(false);
     navigate(path);
+  };
+
+  const openNotification = (notification) => {
+    setReadNotificationIds((prev) => new Set(prev).add(notification.id));
+    setNotificationsOpen(false);
+    navigate(notification.path || "/home");
   };
 
   // Close sidebar on route change on mobile
@@ -586,25 +730,32 @@ export default function DefaultLayout() {
         ) : (
           <div className="space-y-3">
             {notifications.map((notification) => (
-              <div
+              <button
+                type="button"
                 key={notification.id}
-                className={`rounded-lg border p-4 transition-colors ${
+                onClick={() => openNotification(notification)}
+                className={`w-full rounded-lg border p-4 text-left transition-colors hover:border-blue-200 hover:bg-blue-50/60 ${
                   notification.read ? "border-gray-100" : "border-blue-100 bg-blue-50/30"
                 }`}
               >
                 <div className="flex items-start justify-between">
-                  <div className="flex-1">
+                  <div className="flex min-w-0 flex-1 gap-3">
+                    <span className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-white text-blue-600 shadow-sm">
+                      <Icon name={notification.icon || "mdi:bell-outline"} className="h-5 w-5" />
+                    </span>
+                    <div className="min-w-0">
                     <p className="text-sm font-semibold text-gray-900">
                       {notification.title}
                     </p>
                     <p className="mt-1 text-xs text-gray-500">{notification.description}</p>
                     <p className="mt-2 text-xs text-gray-400">{notification.time}</p>
+                    </div>
                   </div>
                   {!notification.read && (
                     <div className="h-2 w-2 rounded-full bg-blue-600"></div>
                   )}
                 </div>
-              </div>
+              </button>
             ))}
           </div>
         )}

@@ -782,6 +782,44 @@ import AppModal from "../components/common/AppModal";
 import { useTask } from "../hooks/useTask";
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from "recharts";
 
+function parseCalendarDate(value) {
+  if (!value) return null;
+  if (value instanceof Date) return Number.isNaN(value.getTime()) ? null : value;
+  const text = String(value);
+  const dateOnly = text.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (dateOnly) {
+    return new Date(Number(dateOnly[1]), Number(dateOnly[2]) - 1, Number(dateOnly[3]));
+  }
+  const parsed = new Date(text);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
+function isSameCalendarDay(value, date) {
+  const parsed = parseCalendarDate(value);
+  return !!parsed && !!date &&
+    parsed.getFullYear() === date.getFullYear() &&
+    parsed.getMonth() === date.getMonth() &&
+    parsed.getDate() === date.getDate();
+}
+
+function formatCalendarTime(value) {
+  const parsed = parseCalendarDate(value);
+  if (!parsed || String(value || "").match(/^\d{4}-\d{2}-\d{2}$/)) return "";
+  return parsed.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+}
+
+function formatDateTime(value) {
+  const parsed = parseCalendarDate(value);
+  if (!parsed) return "No date";
+  return parsed.toLocaleString("en-IN", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
 const moduleMap = {
   pipeline: {
     title: "Pipeline",
@@ -1199,6 +1237,7 @@ function CalendarMonthView() {
   const [events, setEvents] = useState([]);
   const [showModal, setShowModal] = useState(false);
   const [selectedDay, setSelectedDay] = useState(null);
+  const [dayDetailOpen, setDayDetailOpen] = useState(false);
   const [form, setForm] = useState({
     title: "",
     type: "Meeting",
@@ -1227,10 +1266,25 @@ function CalendarMonthView() {
           owner: task.taskAssign || task.taskAssignedTo,
         }),
       );
-      const reminderEvents = (calendarData.events || []).filter(
-        (event) => event.type !== "task",
+      const calendarEvents = Array.isArray(calendarData.events) ? calendarData.events : [];
+      const taskIds = new Set(taskEvents.map((event) => String(event.id)));
+      const syncedEvents = calendarEvents.filter(
+        (event) => event.type !== "task" || !taskIds.has(String(event.id)),
       );
-      const rawEvents = [...taskEvents, ...reminderEvents];
+      const rawReminderRows = Array.isArray(calendarData.reminders)
+        ? calendarData.reminders.map((reminder) => ({
+            type: "reminder",
+            id: reminder.leadReminderId || reminder.id,
+            title: reminder.reminderText || reminder.title,
+            date: reminder.reminderDate || reminder.date,
+            leadId: reminder.leadIdFk || reminder.leadId,
+          }))
+        : [];
+      const reminderIds = new Set(syncedEvents.map((event) => `reminder-${event.id}`));
+      const reminderEvents = rawReminderRows.filter(
+        (event) => !reminderIds.has(`reminder-${event.id}`),
+      );
+      const rawEvents = [...taskEvents, ...syncedEvents, ...reminderEvents];
 
       const mappedEvents = rawEvents.map((e) => {
         let type;
@@ -1243,16 +1297,18 @@ function CalendarMonthView() {
           } else {
             type = "Task";
           }
+        } else if (String(e.type || "").toLowerCase() === "meeting") {
+          type = "Meeting";
         } else {
           type = "Reminder";
         }
         return {
           id: `${e.type}-${e.id}`,
-          title: e.title,
+          title: e.title || "Untitled",
           type,
           time: e.time || e.date,
           note: e.note || "",
-          owner: e.owner || "Unassigned",
+          owner: e.owner || (e.leadId ? `Lead #${e.leadId}` : "Unassigned"),
         };
       });
 
@@ -1297,6 +1353,7 @@ function CalendarMonthView() {
   const handleDayClick = (date) => {
     if (!date) return;
     setSelectedDay(date);
+    setDayDetailOpen(true);
   };
 
   const getEventsForDate = (date) => {
@@ -1307,13 +1364,7 @@ function CalendarMonthView() {
         String(e.type).toLowerCase() !== String(filterType).toLowerCase()
       )
         return false;
-      if (!e.time) return false;
-      const d = new Date(e.time);
-      return (
-        d.getFullYear() === date.getFullYear() &&
-        d.getMonth() === date.getMonth() &&
-        d.getDate() === date.getDate()
-      );
+      return isSameCalendarDay(e.time, date);
     });
   };
 
@@ -1526,13 +1577,7 @@ function CalendarMonthView() {
                   String(filterType).toLowerCase()
               )
                 return false;
-              if (!e.time) return false;
-              const d = new Date(e.time);
-              return (
-                d.getFullYear() === date.getFullYear() &&
-                d.getMonth() === date.getMonth() &&
-                d.getDate() === date.getDate()
-              );
+              return isSameCalendarDay(e.time, date);
             });
 
             return (
@@ -1550,15 +1595,7 @@ function CalendarMonthView() {
                 </div>
                 <div className="flex-1 flex flex-col gap-1 overflow-y-auto">
                   {dayEvents.map((e) => {
-                    const isDateOnly =
-                      e.time && !e.time.includes("T") && !e.time.includes(" ");
-                    const timeStr =
-                      !e.time || isDateOnly
-                        ? ""
-                        : new Date(e.time).toLocaleTimeString([], {
-                            hour: "2-digit",
-                            minute: "2-digit",
-                          });
+                    const timeStr = formatCalendarTime(e.time);
 
                     return (
                       <div
@@ -1577,6 +1614,96 @@ function CalendarMonthView() {
           })}
         </div>
       </div>
+
+      <AppModal
+        open={dayDetailOpen}
+        onClose={() => setDayDetailOpen(false)}
+        title={selectedDay ? selectedDay.toLocaleDateString("en-IN", {
+          weekday: "long",
+          day: "numeric",
+          month: "long",
+          year: "numeric",
+        }) : "Calendar day"}
+        size="2xl"
+      >
+        <div className="space-y-4">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="flex items-center gap-2">
+              {["All", "Meeting", "Reminder", "Task"].map((type) => (
+                <button
+                  key={type}
+                  type="button"
+                  onClick={() => setFilterType(type)}
+                  className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors ${
+                    filterType === type
+                      ? "bg-blue-600 text-white"
+                      : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                  }`}
+                >
+                  {type === "All" ? "All" : `${type}s`}
+                </button>
+              ))}
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                const date = selectedDay || new Date();
+                const formattedDate = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}T10:00`;
+                setForm({ title: "", type: "Task", time: formattedDate, note: "" });
+                setDayDetailOpen(false);
+                setShowModal(true);
+              }}
+              className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-blue-700"
+            >
+              <Icon name="mdi:plus" className="h-4 w-4" />
+              Add item
+            </button>
+          </div>
+
+          {selectedDayEvents.length ? (
+            <div className="max-h-[55vh] space-y-2 overflow-y-auto pr-1">
+              {selectedDayEvents.map((event) => (
+                <div
+                  key={event.id}
+                  className="rounded-lg border border-gray-100 bg-white p-4 shadow-sm"
+                >
+                  <div className="flex items-start gap-3">
+                    <span className={`mt-0.5 inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ${badgeColor(event.type)}`}>
+                      <Icon
+                        name={event.type === "Meeting" ? "mdi:calendar-clock-outline" : event.type === "Reminder" ? "mdi:bell-outline" : "mdi:checkbox-marked-circle-outline"}
+                        className="h-5 w-5"
+                      />
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <p className="font-semibold text-gray-900">{event.title}</p>
+                        <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${badgeColor(event.type)}`}>
+                          {event.type}
+                        </span>
+                      </div>
+                      <p className="mt-1 text-xs font-medium text-gray-500">
+                        {formatDateTime(event.time)}
+                      </p>
+                      {event.owner && (
+                        <p className="mt-1 text-xs text-gray-400">Owner: {event.owner}</p>
+                      )}
+                      {event.note && (
+                        <p className="mt-2 rounded-lg bg-gray-50 p-2 text-sm text-gray-600">{event.note}</p>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="rounded-xl border border-dashed border-gray-200 py-10 text-center">
+              <Icon name="mdi:calendar-blank-outline" className="mx-auto h-10 w-10 text-gray-300" />
+              <p className="mt-2 text-sm font-semibold text-gray-700">No items on this date</p>
+              <p className="mt-1 text-xs text-gray-400">Tasks, reminders, and events for the selected date will appear here.</p>
+            </div>
+          )}
+        </div>
+      </AppModal>
 
       <AppModal
         open={showModal}
